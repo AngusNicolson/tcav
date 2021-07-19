@@ -141,12 +141,15 @@ class ImageActivationGenerator(ActivationGeneratorBase):
       # ensure image has no transparency channel
       img = np.array(
           PIL.Image.open(tf.io.gfile.GFile(filename,
-                                           'rb')).convert('RGB').resize(
+                                           'rb')).resize(
                                                shape, PIL.Image.BILINEAR),
           dtype=np.float32)
       if self.normalize_image:
-        # Normalize pixel values to between 0 and 1.
-        img = img / 255.0
+        # Normalize pixel values to between -1 and 1.
+        img = (img / 127.5) - 1
+      if len(img.shape) != 3:
+          img = np.expand_dims(img, axis=2)
+          img = np.repeat(img, 3, axis=2)
       if not (len(img.shape) == 3 and img.shape[2] == 3):
         return None
       else:

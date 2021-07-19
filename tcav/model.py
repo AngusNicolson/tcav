@@ -324,7 +324,6 @@ class PublicImageModelWrapper(ImageModelWrapper):
 
 
 class GoogleNetWrapper_public(PublicImageModelWrapper):
-
   def __init__(self, sess, model_saved_path, labels_path):
     image_shape_v1 = [224, 224, 3]
     self.image_value_range = (-117, 255 - 117)
@@ -445,7 +444,7 @@ class KerasModelWrapper(ModelWrapper):
     self.labels = tf.io.gfile.GFile(labels_path).read().splitlines()
 
     # Construct gradient ops. Defaults to using the model's output layer
-    self.y_input = tf.compat.v1.placeholder(tf.int64, shape=[None])
+    self.y_input = tf.compat.v1.placeholder(tf.int64, shape=[None, len(self.labels)]) # Why did I need to change this?
     self.loss = self.model.loss_functions[0](self.y_input,
                                              self.model.outputs[0])
     self._make_gradient_tensors()
@@ -473,3 +472,74 @@ class KerasModelWrapper(ModelWrapper):
   def get_inputs_and_outputs_and_ends(self):
     self.ends['input'] = self.model.inputs[0]
     self.ends['prediction'] = self.model.outputs[0]
+
+
+class ResNetWrapper(KerasModelWrapper):
+  """ ResNet Wrapper
+  """
+
+  def __init__(
+      self,
+      sess,
+      model_path,
+      labels_path,
+  ):
+    self.image_shape = [224, 224, 3]
+    self.image_value_range = (-117, 255 - 117)
+
+    super(ResNetWrapper, self).__init__(
+      sess,
+      model_path,
+      labels_path,
+    )
+    self.model_name = 'ResNet'
+
+  #def get_bottleneck_tensors(self):
+  #  self.bottlenecks_tensors = {}
+  #  layers = self.model.layers
+  #  resnet = layers.pop(0)
+  #  resnet_layers = resnet.layers
+  #  layers = resnet_layers + layers
+  #  for layer in layers:
+  #    if 'input' not in layer.name:
+  #      self.bottlenecks_tensors[layer.name] = layer.output
+
+  def get_gradient(self, acts, y, bottleneck_name, example=None):
+    """Return the gradient of the loss with respect to the bottleneck_name.
+
+    Args:
+      acts: activation of the bottleneck
+      y: index of the logit layer
+      bottleneck_name: name of the bottleneck to get gradient wrt.
+      example: input example. Unused by default. Necessary for getting gradients
+        from certain models, such as BERT.
+
+    Returns:
+      the gradient array.
+    """
+    y2 = np.zeros((1, 13))
+    y2[0][y] = 1
+    return self.sess.run(self.bottlenecks_gradients[bottleneck_name], {
+        self.bottlenecks_tensors[bottleneck_name]: acts,
+        self.y_input: y2
+    })
+
+  def get_image_shape(self):
+    """returns the shape of an input image."""
+    return self.image_shape
+
+  @staticmethod
+  def create_input(t_input, image_value_range):
+    """Create input tensor."""
+    def forget_xy(t):
+      """Forget sizes of dimensions [1, 2] of a 4d tensor."""
+      zero = tf.identity(0)
+      return t[:, zero:, zero:, :]
+
+    t_prep_input = t_input
+    if len(t_prep_input.shape) == 3:
+      t_prep_input = tf.expand_dims(t_prep_input, 0)
+    t_prep_input = forget_xy(t_prep_input)
+    lo, hi = image_value_range
+    t_prep_input = lo + t_prep_input * (hi - lo)
+    return t_input, t_prep_input

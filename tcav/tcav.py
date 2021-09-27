@@ -146,7 +146,8 @@ class TCAV(object):
                random_counterpart=None,
                cav_dir=None,
                num_random_exp=5,
-               random_concepts=None):
+               random_concepts=None,
+               do_random_pairs=True):
     """Initialze tcav class.
 
     Args:
@@ -187,7 +188,8 @@ class TCAV(object):
 
     # make pairs to test.
     self._process_what_to_run_expand(num_random_exp=num_random_exp,
-                                     random_concepts=random_concepts)
+                                     random_concepts=random_concepts,
+                                     random_pairs=do_random_pairs)
     # parameters
     self.params = self.get_params()
     tf.compat.v1.logging.info('TCAV will %s params' % len(self.params))
@@ -318,7 +320,7 @@ class TCAV(object):
     del acts
     return result
 
-  def _process_what_to_run_expand(self, num_random_exp=100, random_concepts=None):
+  def _process_what_to_run_expand(self, num_random_exp=100, random_concepts=None, random_pairs=True):
     """Get tuples of parameters to run TCAV with.
 
     TCAV builds random concept to conduct statistical significance testing
@@ -330,6 +332,7 @@ class TCAV(object):
       random_concepts: A list of names of random concepts for the random experiments
                    to draw from. Optional, if not provided, the names will be
                    random500_{i} for i in num_random_exp.
+      random_pairs: Bool. Whether to run random vs random pairs
     """
 
     target_concept_pairs = [(self.target, self.concepts)]
@@ -381,7 +384,7 @@ class TCAV(object):
       all_concepts_randoms.extend(all_concepts_randoms_tmp)
 
     self.all_concepts = list(set(all_concepts_concepts + all_concepts_randoms))
-    self.pairs_to_test = pairs_to_run_concepts if self.relative_tcav else pairs_to_run_concepts + pairs_to_run_randoms
+    self.pairs_to_test = pairs_to_run_concepts if self.relative_tcav or not random_pairs else pairs_to_run_concepts + pairs_to_run_randoms
 
   def get_params(self):
     """Enumerate parameters for the run function.

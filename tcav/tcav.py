@@ -14,11 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 from multiprocessing import dummy as multiprocessing
-from six.moves import range
 from tcav.cav import CAV
 from tcav.cav import get_or_train_cav
 from tcav import run_params
@@ -39,7 +35,7 @@ class TCAV(object):
   """
 
   @staticmethod
-  def get_direction_dir_sign(mymodel, act, cav, concept, class_id, example):
+  def get_direction_dir_sign(mymodel, act, cav, concept, class_id):
     """Get the sign of directional derivative.
 
     Args:
@@ -48,14 +44,13 @@ class TCAV(object):
         cav: an instance of cav
         concept: one concept
         class_id: index of the class of interest (target) in logit layer.
-        example: example corresponding to the given activation
 
     Returns:
         sign of the directional derivative
     """
     # Grad points in the direction which DECREASES probability of class
     grad = np.reshape(mymodel.get_gradient(
-        act, [class_id], cav.bottleneck, example), -1)
+        act, [class_id], cav.bottleneck), -1)
     dot_prod = np.dot(grad, cav.get_direction(concept))
     return dot_prod < 0
 
@@ -137,7 +132,6 @@ class TCAV(object):
     return directional_dir_vals
 
   def __init__(self,
-               sess,
                target,
                concepts,
                bottlenecks,
@@ -151,7 +145,6 @@ class TCAV(object):
     """Initialze tcav class.
 
     Args:
-      sess: tensorflow session.
       target: one target class
       concepts: A list of names of positive concept sets.
       bottlenecks: the name of a bottleneck of interest.
@@ -176,8 +169,6 @@ class TCAV(object):
     self.cav_dir = cav_dir
     self.alphas = alphas
     self.mymodel = activation_generator.get_model()
-    self.model_to_run = self.mymodel.model_name
-    self.sess = sess
     self.random_counterpart = random_counterpart
     self.relative_tcav = (random_concepts is not None) and (set(concepts) == set(random_concepts))
 
@@ -280,6 +271,7 @@ class TCAV(object):
 
     cav_concept = concepts[0]
 
+    # TODO: Gradient calculations not setup yet
     i_up = self.compute_tcav_score(
         mymodel, target_class_for_compute_tcav_score, cav_concept,
         cav_instance, acts[target_class][cav_instance.bottleneck],

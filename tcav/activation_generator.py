@@ -44,13 +44,15 @@ class ActivationGenerator():
         return self.model
 
     def get_activations_for_examples(self, examples, bottleneck):
-        acts = self.model.run_examples(examples, bottleneck)
-        return self.model.reshape_activations(acts).squeeze()
+        out_ = self.model(examples.to(device))
+        del out_
+        acts = self.model.bottlenecks_tensors[bottleneck]
+        return acts.squeeze()
 
     def process_and_load_activations(self, bottleneck_names, concepts):
-        # Need to replace this with datasets and dataloaders
-        # Can then do-away with separate folders for concepts
-        # instead can use .jsons to say which is which
+        # TODO: Need to replace this with datasets and dataloaders
+        #  Can then do-away with separate folders for concepts
+        #  instead can use .jsons to say which is which
         acts = {}
         self.acts_dir.mkdir(exist_ok=True, parents=True)
         self.model.model.to(device)

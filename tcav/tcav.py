@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import os
 from multiprocessing import dummy as multiprocessing
 from tcav.cav import CAV
 from tcav.cav import get_or_train_cav
@@ -176,6 +177,26 @@ class TCAV(object):
     self.params = self.get_params()
     tf.compat.v1.logging.info('TCAV will %s params' % len(self.params))
 
+  def train_cavs(self, overwrite=False):
+    # Get acts
+    for pair in self.pairs_to_test:
+      pair = pair[1]
+      acts = self.activation_generator.process_and_load_activations(self.bottlenecks, pair)
+      for alpha in self.alphas:
+       for bn in self.bottlenecks:
+        cav_hparams = CAV.default_hparams()
+        cav_hparams['alpha'] = alpha
+        cav_instance = get_or_train_cav(
+            pair,
+            bn,
+            acts,
+            cav_dir=self.cav_dir,
+            cav_hparams=cav_hparams,
+            overwrite=overwrite)
+
+      # clean up
+      del acts
+
   def run(self, num_workers=10, run_parallel=False, overwrite=False, return_proto=False):
     """Run TCAV for all parameters (concept and random), write results to html.
 
@@ -199,7 +220,7 @@ class TCAV(object):
       pool = multiprocessing.Pool(num_workers)
       for i, res in enumerate(pool.imap(
           lambda p: self._run_single_set(
-            p, overwrite=overwrite, run_parallel=run_parallel),
+            p, run_parallel=run_parallel),
           self.params), 1):
         tf.compat.v1.logging.info('Finished running param %s of %s' % (i, len(self.params)))
         results.append(res)
@@ -207,7 +228,7 @@ class TCAV(object):
     else:
       for i, param in enumerate(self.params):
         tf.compat.v1.logging.info('Running param %s of %s' % (i, len(self.params)))
-        results.append(self._run_single_set(param, overwrite=overwrite, run_parallel=run_parallel))
+        results.append(self._run_single_set(param, run_parallel=run_parallel))
     tf.compat.v1.logging.info('Done running %s params. Took %s seconds...' % (len(
         self.params), time.time() - now))
     if return_proto:
@@ -215,7 +236,7 @@ class TCAV(object):
     else:
       return results
 
-  def _run_single_set(self, param, overwrite=False, run_parallel=False):
+  def _run_single_set(self, param, run_parallel=False):
     """Run TCAV with provided for one set of (target, concepts).
 
     Args:
@@ -237,44 +258,25 @@ class TCAV(object):
 
     tf.compat.v1.logging.info('running %s %s' % (target_class, concepts))
 
-    # TODO: Refactor so only one pass of the model is done per img
-    #  As opposed to one per bottleneck as currently done
-    # TODO: Do not need activations here if CAV already exists
-    #  Refactor to train all CAVs THEN run TCAV on all pairs
-    # Get acts
-    acts = activation_generator.process_and_load_activations(
-        [bottleneck], concepts + [target_class])
     # Get CAVs
     cav_hparams = CAV.default_hparams()
     cav_hparams['alpha'] = alpha
-    cav_instance = get_or_train_cav(
-        concepts,
-        bottleneck,
-        acts,
-        cav_dir=cav_dir,
-        cav_hparams=cav_hparams,
-        overwrite=overwrite)
+    a_cav_key = CAV.cav_key(concepts, bottleneck, cav_hparams['model_type'], cav_hparams['alpha'])
 
-    # clean up
-    for c in concepts:
-      del acts[c]
+    cav_path = os.path.join(cav_dir, a_cav_key.replace('/', '.') + '.pkl')
+    cav_instance = CAV.load_cav(cav_path)
 
     # Hypo testing
-    a_cav_key = CAV.cav_key(concepts, bottleneck, cav_hparams['model_type'],
-                            cav_hparams['alpha'])
-    target_class_for_compute_tcav_score = target_class
-
     cav_concept = concepts[0]
 
     # TODO: Convert to accept pytorch datasets
     i_up = self.compute_tcav_score(
-        mymodel, target_class_for_compute_tcav_score, cav_concept,
-        cav_instance, activation_generator.get_examples_for_concept(target_class),
+        mymodel, target_class, cav_concept, cav_instance,
+        activation_generator.get_examples_for_concept(target_class),
         run_parallel=run_parallel)
     # TODO: This is not efficient, these are already calculated in compute_tcav_score
     val_directional_dirs = self.get_directional_dir(
-        mymodel, target_class_for_compute_tcav_score, cav_concept,
-        cav_instance,
+        mymodel, target_class, cav_concept, cav_instance,
         activation_generator.get_examples_for_concept(target_class))
     result = {
         'cav_key':
@@ -304,7 +306,6 @@ class TCAV(object):
         'bottleneck':
             bottleneck
     }
-    del acts
     return result
 
   def _process_what_to_run_expand(self, num_random_exp=100, random_concepts=None, random_pairs=True):

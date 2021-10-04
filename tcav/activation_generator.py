@@ -16,12 +16,15 @@ limitations under the License.
 from multiprocessing import dummy as multiprocessing
 import os
 import os.path
+import itertools
+import json
 import numpy as np
 from PIL import Image
 import torch
 import tensorflow as tf
 from pathlib import Path
 from torchvision.transforms.functional import normalize, resize
+from torch.utils.data import DataLoader
 
 if torch.cuda.is_available():
     device = torch.device("cuda")
@@ -31,14 +34,27 @@ else:
     print("Using {}".format(device))
 
 
-class ActivationGenerator():
+class ActivationGenerator:
     """Activation generator for a basic image model"""
-    def __init__(self, model, source_dir, acts_dir, max_examples=500):
+    def __init__(self, model, source_json, acts_dir, dataset_class, max_examples=500):
+        """
+        source_json (str): Path to a .json with filepaths for each img, categorised by concept
+        dataset_class (Dataset): A dataset class to use in
+        """
         self.model = model
-        self.source_dir = Path(source_dir)
+        self.source_json = Path(source_json)
         self.acts_dir = Path(acts_dir)
+        self.dataset_class = dataset_class
         self.max_examples = max_examples
         self.shape = model.shape
+
+        with open(self.source_json, "r") as fp:
+            self.concept_dict = json.load(fp)
+
+        # Reduce size of each concept to max_examples
+        self.concept_dict = {
+            k: dict(itertools.islice(v.items(), self.max_examples)) for k, v in self.concept_dict.items()
+        }
 
     def get_model(self):
         return self.model
@@ -49,14 +65,27 @@ class ActivationGenerator():
         acts = self.model.bottlenecks_tensors[bottleneck]
         return acts.squeeze()
 
+    def get_activations_for_concept(self, concept, bottleneck_names, batch_size=32, shuffle=True):
+        """Get's activations for specified bottlenecks as np.arrays with no gradients"""
+        dataset = self.dataset_class(self.concept_dict, concept)
+        self.model.eval()
+        dataloader = DataLoader(dataset, batch_size, shuffle=shuffle)
+        bns = {bn: [] for bn in bottleneck_names}
+        with torch.no_grad():
+            for sample in dataloader:
+                out_ = self.model(sample["img"].to(device))
+                for bn in bottleneck_names:
+                    bns[bn].append(self.model.bottlenecks_tensors[bn].cpu().detach().numpy().squeeze())
+                del out_
+
+        bns = {k: np.concatenate(v) for k, v in bns.items()}
+        return bns
+
     def process_and_load_activations(self, bottleneck_names, concepts):
-        # TODO: Need to replace this with datasets and dataloaders
-        #  Can then do-away with separate folders for concepts
-        #  instead can use .jsons to say which is which
+        """Load activations if they exist, otherwise run imgs through model to create them and save as np.arrays"""
         acts = {}
         self.acts_dir.mkdir(exist_ok=True, parents=True)
         self.model.model.to(device)
-        self.model.eval()
 
         for concept in concepts:
             if concept not in acts:
@@ -64,23 +93,14 @@ class ActivationGenerator():
             act_paths = [self.acts_dir / f"acts_{concept}_{bottleneck_name}" for bottleneck_name in bottleneck_names]
             acts_exist = [path.exists() for path in act_paths]
 
-            # Must run examples through model so that hooks are generated
-            if not all(acts_exist):
-                examples = self.get_examples_for_concept(concept).to(device)
-                out = self.model(examples)
-                del out
-
-            # If the activations exist as a file then load
-            # otherwise get from model
-            # Could remove loading from file if generated anyway?
-            for i, bottleneck_name in enumerate(bottleneck_names):
-                if acts_exist[i]:
-                    with tf.io.gfile.GFile(act_paths[i], 'rb') as f:
-                        acts[concept][bottleneck_name] = np.load(f, allow_pickle=True).squeeze()
-                else:
-                    acts[concept][bottleneck_name] = self.model.bottlenecks_tensors[bottleneck_name].cpu().detach().numpy().squeeze()
-                    with tf.io.gfile.GFile(act_paths[i], 'w') as f:
-                        np.save(f, acts[concept][bottleneck_name], allow_pickle=False)
+            # If all the activations exist as a file then load, otherwise get from model
+            if all(acts_exist):
+                for i, bn in enumerate(bottleneck_names):
+                    acts[concept][bn] = np.load(str(act_paths[i]), allow_pickle=True).squeeze()
+            else:
+                acts[concept] = self.get_activations_for_concept(concept, bottleneck_names)
+                for i, bn in enumerate(bottleneck_names):
+                    np.save(str(act_paths[i]), acts[concept][bn], allow_pickle=False)
         return acts
 
     def get_examples_for_concept(self, concept):

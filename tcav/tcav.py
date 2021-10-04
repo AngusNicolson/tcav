@@ -237,6 +237,10 @@ class TCAV(object):
 
     tf.compat.v1.logging.info('running %s %s' % (target_class, concepts))
 
+    # TODO: Refactor so only one pass of the model is done per img
+    #  As opposed to one per bottleneck as currently done
+    # TODO: Do not need activations here if CAV already exists
+    #  Refactor to train all CAVs THEN run TCAV on all pairs
     # Get acts
     acts = activation_generator.process_and_load_activations(
         [bottleneck], concepts + [target_class])
@@ -262,6 +266,7 @@ class TCAV(object):
 
     cav_concept = concepts[0]
 
+    # TODO: Convert to accept pytorch datasets
     i_up = self.compute_tcav_score(
         mymodel, target_class_for_compute_tcav_score, cav_concept,
         cav_instance, activation_generator.get_examples_for_concept(target_class),

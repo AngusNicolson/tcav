@@ -30,7 +30,7 @@ else:
 
 class ActivationGenerator:
     """Activation generator for a basic image model"""
-    def __init__(self, model, source_json, acts_dir, dataset_class, max_examples=500):
+    def __init__(self, model, source_json, acts_dir, dataset_class, max_examples=500, num_workers=0):
         """
         source_json (str): Path to a .json with filepaths for each img, categorised by concept
         dataset_class (Dataset): A dataset class to use in
@@ -41,6 +41,7 @@ class ActivationGenerator:
         self.dataset_class = dataset_class
         self.max_examples = max_examples
         self.shape = model.shape
+        self.num_workers = num_workers
 
         with open(self.source_json, "r") as fp:
             self.concept_dict = json.load(fp)
@@ -63,7 +64,7 @@ class ActivationGenerator:
         """Get's activations for specified bottlenecks as np.arrays with no gradients"""
         dataset = self.dataset_class(self.concept_dict, concept)
         self.model.eval()
-        dataloader = DataLoader(dataset, batch_size, shuffle=shuffle)
+        dataloader = DataLoader(dataset, batch_size, shuffle=shuffle, num_workers=self.num_workers)
         bns = {bn: [] for bn in bottleneck_names}
         with torch.no_grad():
             for sample in dataloader:
@@ -84,7 +85,7 @@ class ActivationGenerator:
         for concept in concepts:
             if concept not in acts:
                 acts[concept] = {}
-            act_paths = [self.acts_dir / f"acts_{concept}_{bottleneck_name}" for bottleneck_name in bottleneck_names]
+            act_paths = [self.acts_dir / f"acts_{concept}_{bottleneck_name}.npy" for bottleneck_name in bottleneck_names]
             acts_exist = [path.exists() for path in act_paths]
 
             # If all the activations exist as a file then load, otherwise get from model
@@ -101,7 +102,7 @@ class ActivationGenerator:
         if n is None:
             n = self.max_examples
         dataset = self.dataset_class(self.concept_dict, concept)
-        dataloader = DataLoader(dataset, n, shuffle=shuffle)
+        dataloader = DataLoader(dataset, n, shuffle=shuffle, num_workers=self.num_workers)
         for sample in dataloader:
             imgs = sample["img"]
             break

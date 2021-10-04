@@ -13,17 +13,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from multiprocessing import dummy as multiprocessing
-import os
-import os.path
 import itertools
 import json
 import numpy as np
-from PIL import Image
 import torch
-import tensorflow as tf
 from pathlib import Path
-from torchvision.transforms.functional import normalize, resize
 from torch.utils.data import DataLoader
 
 if torch.cuda.is_available():
@@ -103,72 +97,12 @@ class ActivationGenerator:
                     np.save(str(act_paths[i]), acts[concept][bn], allow_pickle=False)
         return acts
 
-    def get_examples_for_concept(self, concept):
-        concept_dir = self.source_dir / concept
-        img_paths = [
-          concept_dir / d for d in tf.io.gfile.listdir(concept_dir)
-        ]
-        imgs = self.load_images_from_files(
-          img_paths, self.max_examples)
+    def get_examples_for_concept(self, concept, n=None, shuffle=False):
+        if n is None:
+            n = self.max_examples
+        dataset = self.dataset_class(self.concept_dict, concept)
+        dataloader = DataLoader(dataset, n, shuffle=shuffle)
+        for sample in dataloader:
+            imgs = sample["img"]
+            break
         return imgs
-
-    def load_image_from_file(self, path):
-        img = Image.open(path)
-        img = np.array(img).astype("float32") / 255
-        img = np.expand_dims(img, 0)
-        img = np.repeat(img, repeats=3, axis=0)
-        img = torch.from_numpy(img)
-
-        # As per pretrained pytorch models
-        img = normalize(img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        img = resize(img, self.shape)
-
-        return img
-
-    def load_images_from_files(self,
-                               filenames,
-                               max_imgs=500,
-                               do_shuffle=True,
-                               run_parallel=True,
-                               num_workers=50):
-        """Return image arrays from filenames.
-
-        Args:
-          filenames: locations of image files.
-          max_imgs: maximum number of images from filenames.
-          do_shuffle: before getting max_imgs files, shuffle the names or not
-          run_parallel: get images in parallel or not
-          shape: desired shape of the image
-          num_workers: number of workers in parallelization.
-
-        Returns:
-          image arrays
-
-        """
-        imgs = []
-        # First shuffle a copy of the filenames.
-        filenames = filenames[:]
-        if do_shuffle:
-            np.random.shuffle(filenames)
-
-        if run_parallel:
-            pool = multiprocessing.Pool(num_workers)
-            imgs = pool.map(
-                lambda filename: self.load_image_from_file(filename),
-                filenames[:max_imgs])
-            pool.close()
-            imgs = [img for img in imgs if img is not None]
-            if len(imgs) <= 1:
-                raise ValueError(
-                  'You must have more than 1 image in each class to run TCAV.')
-        else:
-            for filename in filenames:
-                img = self.load_image_from_file(filename)
-                if img is not None:
-                    imgs.append(img)
-                if len(imgs) >= max_imgs:
-                    break
-            if len(imgs) <= 1:
-                raise ValueError(
-                  'You must have more than 1 image in each class to run TCAV.')
-        return torch.stack(imgs, dim=0)

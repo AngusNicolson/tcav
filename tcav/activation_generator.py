@@ -36,6 +36,7 @@ class ActivationGenerator:
         dataset_class (Dataset): A dataset class to use in
         """
         self.model = model
+        self.model.model.to(device)
         self.source_json = Path(source_json)
         self.acts_dir = Path(acts_dir)
         self.dataset_class = dataset_class
@@ -54,11 +55,20 @@ class ActivationGenerator:
     def get_model(self):
         return self.model
 
-    def get_activations_for_examples(self, examples, bottleneck):
-        out_ = self.model(examples.to(device))
-        del out_
-        acts = self.model.bottlenecks_tensors[bottleneck]
-        return acts.squeeze()
+    def get_activations_for_examples(self, examples, bottleneck, batch_size=32, grad=False):
+        acts = []
+        if grad:
+            for batch in torch.split(examples, batch_size):
+                out_ = self.model(batch.to(device))
+                del out_
+                acts.append(self.model.bottlenecks_tensors[bottleneck].cpu())
+        else:
+            with torch.no_grad():
+                for batch in torch.split(examples, batch_size):
+                    out_ = self.model(batch.to(device))
+                    del out_
+                    acts.append(self.model.bottlenecks_tensors[bottleneck].cpu())
+        return torch.cat(acts)
 
     def get_activations_for_concept(self, concept, bottleneck_names, batch_size=32, shuffle=True):
         """Get's activations for specified bottlenecks as np.arrays with no gradients"""

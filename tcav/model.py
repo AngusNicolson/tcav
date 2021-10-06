@@ -40,6 +40,7 @@ class ModelWrapper():
         self.bottlenecks_gradients = None
         self.bottlenecks_tensors = {}
         self.model = copy.deepcopy(model)
+        self.model.eval()
         self.shape = (224, 224)
         self.labels = labels
 

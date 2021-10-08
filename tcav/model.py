@@ -124,8 +124,3 @@ def create_model(freeze_weights=False):
         torch.nn.Linear(2048, 13)
     )
     return model
-
-
-  def get_image_shape(self):
-    """returns the shape of an input image."""
-    return self.image_shape

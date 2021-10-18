@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import os
+from pathlib import Path
 from multiprocessing import dummy as multiprocessing
 from tcav.cav import CAV
 from tcav.cav import get_or_train_cav
@@ -152,6 +153,7 @@ class TCAV(object):
                alphas,
                random_counterpart=None,
                cav_dir=None,
+               grad_dir=None,
                num_random_exp=5,
                random_concepts=None,
                do_random_pairs=True):
@@ -165,6 +167,7 @@ class TCAV(object):
                             activations.
       alphas: list of hyper parameters to run
       cav_dir: the path to store CAVs
+      grad_dir: the path to store target gradients
       random_counterpart: the random concept to run against the concepts for
                   statistical testing. If supplied, only this set will be
                   used as a positive set for calculating random TCAVs
@@ -180,6 +183,7 @@ class TCAV(object):
     self.bottlenecks = bottlenecks
     self.activation_generator = activation_generator
     self.cav_dir = cav_dir
+    self.grad_dir = Path(grad_dir)
     self.alphas = alphas
     self.mymodel = activation_generator.get_model()
     self.random_counterpart = random_counterpart
@@ -199,6 +203,8 @@ class TCAV(object):
     tf.compat.v1.logging.info('TCAV will %s params' % len(self.params))
 
   def train_cavs(self, overwrite=False):
+    # TODO: Don't load activations if CAVs already trained
+    t0 = time.time()
     # Get acts
     for pair in self.pairs_to_test:
       pair = pair[1]
@@ -214,7 +220,7 @@ class TCAV(object):
             cav_dir=self.cav_dir,
             cav_hparams=cav_hparams,
             overwrite=overwrite)
-
+        print(f"Finished training {cav_instance.get_key()} ({time.time() - t0:.1f} s)")
       # clean up
       del acts
 
@@ -231,7 +237,13 @@ class TCAV(object):
     i = 0
     examples = self.activation_generator.get_examples_for_concept(self.target)
     for bottleneck in self.bottlenecks:
-        gradients = self.get_gradients(self.mymodel, self.target, bottleneck, examples)
+        grad_path = self.grad_dir / f"grad_{self.target}_{bottleneck}.npy"
+        if grad_path.exists():
+            gradients = np.load(str(grad_path), allow_pickle=True)
+        else:
+            gradients = self.get_gradients(self.mymodel, self.target, bottleneck, examples)
+            gradients = np.stack(gradients)
+            np.save(str(grad_path), gradients, allow_pickle=False)
         for param in self.params:
             if param.bottleneck == bottleneck:
                 tf.compat.v1.logging.info('Running param %s of %s' % (i, len(self.params)))

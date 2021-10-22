@@ -208,7 +208,7 @@ class TCAV(object):
     # Get acts
     for pair in self.pairs_to_test:
       pair = pair[1]
-      acts = self.activation_generator.process_and_load_activations(self.bottlenecks, pair)
+      acts = self.activation_generator.process_and_load_activations(self.bottlenecks, pair, overwrite=overwrite)
       for alpha in self.alphas:
        for bn in self.bottlenecks:
         cav_hparams = CAV.default_hparams()
@@ -224,7 +224,7 @@ class TCAV(object):
       # clean up
       del acts
 
-  def run(self):
+  def run(self, overwrite=False):
     """Run TCAV for all parameters (concept and random), write results to html.
 
     Returns:
@@ -238,7 +238,7 @@ class TCAV(object):
     examples = self.activation_generator.get_examples_for_concept(self.target)
     for bottleneck in self.bottlenecks:
         grad_path = self.grad_dir / f"grad_{self.target}_{bottleneck}.npy"
-        if grad_path.exists():
+        if grad_path.exists() and not overwrite:
             gradients = np.load(str(grad_path), allow_pickle=True)
         else:
             gradients = self.get_gradients(self.mymodel, self.target, bottleneck, examples)

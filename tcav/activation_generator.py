@@ -87,8 +87,13 @@ class ActivationGenerator:
         bns = {k: np.concatenate(v) for k, v in bns.items()}
         return bns
 
-    def process_and_load_activations(self, bottleneck_names, concepts):
-        """Load activations if they exist, otherwise run imgs through model to create them and save as np.arrays"""
+    def process_and_load_activations(self, bottleneck_names, concepts, overwrite=False):
+        """Load activations if they exist, otherwise run imgs through model to create them and save as np.arrays
+
+        bottleneck_names: Names of bottleneck layers to load activations for as in model.bottlenecks
+        concepts: Concepts to load activations for
+        overwrite: Whether to overwrite activations even if they all exist - activations overwritten either way if any do not exist
+        """
         acts = {}
         self.acts_dir.mkdir(exist_ok=True, parents=True)
         self.model.model.to(device)
@@ -100,11 +105,14 @@ class ActivationGenerator:
             acts_exist = [path.exists() for path in act_paths]
 
             # If all the activations exist as a file then load, otherwise get from model
-            if all(acts_exist):
+            if all(acts_exist) and not overwrite:
                 for i, bn in enumerate(bottleneck_names):
                     acts[concept][bn] = np.load(str(act_paths[i]), allow_pickle=True).squeeze()
             else:
-                acts[concept] = self.get_activations_for_concept(concept, bottleneck_names)
+                # The dataset is not shuffled for reproducibility
+                # This means the dataset will be loaded in the order it appear in .json
+                # Ensure that this is acceptable (imgs are not ordered in some way)
+                acts[concept] = self.get_activations_for_concept(concept, bottleneck_names, shuffle=False)
                 for i, bn in enumerate(bottleneck_names):
                     np.save(str(act_paths[i]), acts[concept][bn], allow_pickle=False)
         return acts

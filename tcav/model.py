@@ -57,7 +57,7 @@ class ModelWrapper():
 
             return hook
 
-        for name, mod in self.model._modules.items():
+        for name, mod in self.model.named_modules():
             if name in bottlenecks.keys():
                 mod.register_forward_hook(save_activation(bottlenecks[name]))
 

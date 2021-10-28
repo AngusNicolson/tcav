@@ -117,12 +117,17 @@ class ActivationGenerator:
                     np.save(str(act_paths[i]), acts[concept][bn], allow_pickle=False)
         return acts
 
-    def get_examples_for_concept(self, concept, n=None, shuffle=False):
+    def get_examples_for_concept(self, concept, n=None, shuffle=False, return_ids=False):
         if n is None:
             n = self.max_examples
         dataset = self.dataset_class(self.concept_dict, concept, prefix=self.prefix)
         dataloader = DataLoader(dataset, n, shuffle=shuffle, num_workers=self.num_workers)
         for sample in dataloader:
             imgs = sample["img"]
+            ids = sample["id"]
             break
-        return imgs
+
+        if return_ids:
+            return ids, imgs
+        else:
+            return imgs

@@ -33,7 +33,10 @@ class ActivationGenerator:
     def __init__(self, model, source_json, acts_dir, dataset_class, max_examples=500, num_workers=0, prefix=""):
         """
         source_json (str): Path to a .json with filepaths for each img, categorised by concept
-        dataset_class (Dataset): A dataset class to use in
+        dataset_class (Dataset): A dataset Class. Requires inputs:
+                                 json_file (img file paths and metadata),
+                                 split (which data split to use),
+                                 prefix (filepath prefixes)
         """
         self.model = model
         self.model.model.to(device)

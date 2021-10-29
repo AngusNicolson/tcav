@@ -53,7 +53,9 @@ class ActivationGenerator:
 
         # Reduce size of each concept to max_examples
         self.concept_dict = {
-            k: dict(itertools.islice(v.items(), self.max_examples)) for k, v in self.concept_dict.items()
+            out_k: {
+                k: v[:self.max_examples] if type(v) == list else v for k, v in out_v.items()
+            } for out_k, out_v in self.concept_dict.items()
         }
 
     def get_model(self):
@@ -82,7 +84,7 @@ class ActivationGenerator:
         bns = {bn: [] for bn in bottleneck_names}
         with torch.no_grad():
             for sample in dataloader:
-                out_ = self.model(sample["img"].to(device))
+                out_ = self.model(sample[0].to(device))
                 for bn in bottleneck_names:
                     bns[bn].append(self.model.bottlenecks_tensors[bn].cpu().detach().numpy().squeeze())
                 del out_
@@ -126,8 +128,7 @@ class ActivationGenerator:
         dataset = self.dataset_class(self.concept_dict, concept, prefix=self.prefix)
         dataloader = DataLoader(dataset, n, shuffle=shuffle, num_workers=self.num_workers)
         for sample in dataloader:
-            imgs = sample["img"]
-            ids = sample["id"]
+            imgs, ids = sample
             break
 
         if return_ids:

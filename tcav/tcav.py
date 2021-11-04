@@ -394,7 +394,7 @@ class TCAV(object):
     for bottleneck in self.bottlenecks:
       for target_in_test, concepts_in_test in self.pairs_to_test:
         for alpha in self.alphas:
-          print('{bottleneck} {concepts_in_test} {target_in_test} {alpha}')
+          print(f'{bottleneck} {concepts_in_test} {target_in_test} {alpha}')
           params.append(
               run_params.RunParams(bottleneck, concepts_in_test, target_in_test,
                                    self.activation_generator, self.cav_dir,

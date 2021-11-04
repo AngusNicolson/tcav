@@ -223,7 +223,7 @@ class CAV(object):
         'saved_path': self.save_path
     }
     if self.save_path is not None:
-      with open(self.save_path, 'w') as pkl_file:
+      with open(self.save_path, 'wb') as pkl_file:
         pickle.dump(save_dict, pkl_file)
     else:
       print('save_path is None. Not saving anything')

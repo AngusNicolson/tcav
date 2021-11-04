@@ -199,7 +199,7 @@ class TCAV(object):
                                      random_pairs=do_random_pairs)
     # parameters
     self.params = self.get_params()
-    print('TCAV will %s params' % len(self.params))
+    print(f'TCAV will {len(self.params)} params')
 
   def train_cavs(self, overwrite=False):
     # TODO: Don't load activations if CAVs already trained
@@ -230,7 +230,7 @@ class TCAV(object):
       results: an object (either a Results proto object or a list of
         dictionaries) containing metrics for TCAV results.
     """
-    print('running %s params' % len(self.params))
+    print(f'running {len(self.params)} params')
     results = []
     now = time.time()
     i = 0
@@ -245,11 +245,10 @@ class TCAV(object):
             np.save(str(grad_path), gradients, allow_pickle=False)
         for param in self.params:
             if param.bottleneck == bottleneck:
-                print('Running param %s of %s' % (i, len(self.params)))
+                print(f'Running param {i} of {len(self.params)}')
                 results.append(self._run_single_set(param, gradients))
                 i += 1
-    print('Done running %s params. Took %s seconds...' % (len(
-        self.params), time.time() - now))
+    print(f'Done running {len(self.params)} params. Took {time.time() - now} seconds...')
     return results
 
   def _run_single_set(self, param, gradients):
@@ -272,7 +271,7 @@ class TCAV(object):
     cav_dir = param.cav_dir
     # first check if target class is in model.
 
-    print('running %s %s' % (target_class, concepts))
+    print(f'running {target_class} {concepts}')
 
     # Get CAVs
     cav_hparams = CAV.default_hparams()
@@ -395,8 +394,7 @@ class TCAV(object):
     for bottleneck in self.bottlenecks:
       for target_in_test, concepts_in_test in self.pairs_to_test:
         for alpha in self.alphas:
-          print('%s %s %s %s', bottleneck, concepts_in_test,
-                          target_in_test, alpha)
+          print('{bottleneck} {concepts_in_test} {target_in_test} {alpha}')
           params.append(
               run_params.RunParams(bottleneck, concepts_in_test, target_in_test,
                                    self.activation_generator, self.cav_dir,

@@ -74,28 +74,30 @@ class ActivationGenerator:
                     acts.append(self.model.bottlenecks_tensors[bottleneck].cpu())
         return torch.cat(acts)
 
-    def get_activations_for_concept(self, concept, bottleneck_names, batch_size=32, shuffle=True):
+    def get_activations_for_concept(self, concept, bottleneck_names, batch_size=32, shuffle=True, n_repeats=1):
         """Get's activations for specified bottlenecks as np.arrays with no gradients"""
         dataset = self.dataset_class(self.concept_dict, concept, prefix=self.prefix)
         self.model.eval()
-        dataloader = DataLoader(dataset, batch_size, shuffle=shuffle, num_workers=self.num_workers)
         bns = {bn: [] for bn in bottleneck_names}
-        with torch.no_grad():
-            for sample in dataloader:
-                out_ = self.model(sample["img"].to(device))
-                for bn in bottleneck_names:
-                    bns[bn].append(self.model.bottlenecks_tensors[bn].cpu().detach().numpy().squeeze())
-                del out_
+        for i in range(n_repeats):
+            dataloader = DataLoader(dataset, batch_size, shuffle=shuffle, num_workers=self.num_workers)
+            with torch.no_grad():
+                for sample in dataloader:
+                    out_ = self.model(sample["img"].to(device))
+                    for bn in bottleneck_names:
+                        bns[bn].append(self.model.bottlenecks_tensors[bn].cpu().detach().numpy().squeeze())
+                    del out_
 
         bns = {k: np.concatenate(v) for k, v in bns.items()}
         return bns
 
-    def process_and_load_activations(self, bottleneck_names, concepts, overwrite=False):
+    def process_and_load_activations(self, bottleneck_names, concepts, overwrite=False, n_repeats=1):
         """Load activations if they exist, otherwise run imgs through model to create them and save as np.arrays
 
         bottleneck_names: Names of bottleneck layers to load activations for as in model.bottlenecks
         concepts: Concepts to load activations for
         overwrite: Whether to overwrite activations even if they all exist - activations overwritten either way if any do not exist
+        n_repeats: number of times to load dataset (for use with augmentations)
         """
         acts = {}
         self.acts_dir.mkdir(exist_ok=True, parents=True)
@@ -115,7 +117,7 @@ class ActivationGenerator:
                 # The dataset is not shuffled for reproducibility
                 # This means the dataset will be loaded in the order it appear in .json
                 # Ensure that this is acceptable (imgs are not ordered in some way)
-                acts[concept] = self.get_activations_for_concept(concept, bottleneck_names, shuffle=False)
+                acts[concept] = self.get_activations_for_concept(concept, bottleneck_names, shuffle=False, n_repeats=n_repeats)
                 for i, bn in enumerate(bottleneck_names):
                     np.save(str(act_paths[i]), acts[concept][bn], allow_pickle=False)
         return acts

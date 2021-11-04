@@ -155,7 +155,8 @@ class TCAV(object):
                grad_dir=None,
                num_random_exp=5,
                random_concepts=None,
-               do_random_pairs=True):
+               do_random_pairs=True,
+               n_repeats=1):
     """Initialze tcav class.
 
     Args:
@@ -176,6 +177,7 @@ class TCAV(object):
                        names will be random500_{i} for i in num_random_exp.
                        Relative TCAV can be performed by passing in the same
                        value for both concepts and random_concepts.
+      n_repeats: Load dataset n_repeats times for CAV training (for use with augmentations)
     """
     self.target = target
     self.concepts = concepts
@@ -187,6 +189,7 @@ class TCAV(object):
     self.mymodel = activation_generator.get_model()
     self.random_counterpart = random_counterpart
     self.relative_tcav = (random_concepts is not None) and (set(concepts) == set(random_concepts))
+    self.n_repeats = n_repeats
 
     if num_random_exp < 2:
         raise ValueError('The number of random concepts has to be at least 2')
@@ -207,7 +210,7 @@ class TCAV(object):
     # Get acts
     for pair in self.pairs_to_test:
       pair = pair[1]
-      acts = self.activation_generator.process_and_load_activations(self.bottlenecks, pair, overwrite=overwrite)
+      acts = self.activation_generator.process_and_load_activations(self.bottlenecks, pair, overwrite=overwrite, n_repeats=self.n_repeats)
       for alpha in self.alphas:
        for bn in self.bottlenecks:
         cav_hparams = CAV.default_hparams()

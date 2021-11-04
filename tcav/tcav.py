@@ -23,7 +23,6 @@ from tcav import run_params
 from tcav import utils
 import numpy as np
 import time
-import tensorflow as tf
 from tcav.utils import device
 
 
@@ -190,7 +189,7 @@ class TCAV(object):
     self.relative_tcav = (random_concepts is not None) and (set(concepts) == set(random_concepts))
 
     if num_random_exp < 2:
-        tf.compat.v1.logging.error('the number of random concepts has to be at least 2')
+        raise ValueError('The number of random concepts has to be at least 2')
     if random_concepts:
       num_random_exp = len(random_concepts)
 
@@ -200,7 +199,7 @@ class TCAV(object):
                                      random_pairs=do_random_pairs)
     # parameters
     self.params = self.get_params()
-    tf.compat.v1.logging.info('TCAV will %s params' % len(self.params))
+    print(f'TCAV will be run for {len(self.params)} params')
 
   def train_cavs(self, overwrite=False):
     # TODO: Don't load activations if CAVs already trained
@@ -231,7 +230,7 @@ class TCAV(object):
       results: an object (either a Results proto object or a list of
         dictionaries) containing metrics for TCAV results.
     """
-    tf.compat.v1.logging.info('running %s params' % len(self.params))
+    print(f'Running {len(self.params)} params')
     results = []
     now = time.time()
     i = 0
@@ -246,11 +245,10 @@ class TCAV(object):
             np.save(str(grad_path), gradients, allow_pickle=False)
         for param in self.params:
             if param.bottleneck == bottleneck:
-                tf.compat.v1.logging.info('Running param %s of %s' % (i, len(self.params)))
+                print(f'Running param {i} of {len(self.params)}')
                 results.append(self._run_single_set(param, gradients))
                 i += 1
-    tf.compat.v1.logging.info('Done running %s params. Took %s seconds...' % (len(
-        self.params), time.time() - now))
+    print(f'Done running {len(self.params)} params. Took {time.time() - now} seconds...')
     return results
 
   def _run_single_set(self, param, gradients):
@@ -273,7 +271,7 @@ class TCAV(object):
     cav_dir = param.cav_dir
     # first check if target class is in model.
 
-    tf.compat.v1.logging.info('running %s %s' % (target_class, concepts))
+    print(f'Running {target_class} {concepts}')
 
     # Get CAVs
     cav_hparams = CAV.default_hparams()
@@ -396,8 +394,6 @@ class TCAV(object):
     for bottleneck in self.bottlenecks:
       for target_in_test, concepts_in_test in self.pairs_to_test:
         for alpha in self.alphas:
-          tf.compat.v1.logging.info('%s %s %s %s', bottleneck, concepts_in_test,
-                          target_in_test, alpha)
           params.append(
               run_params.RunParams(bottleneck, concepts_in_test, target_in_test,
                                    self.activation_generator, self.cav_dir,

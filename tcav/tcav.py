@@ -210,6 +210,8 @@ class TCAV(object):
     # Get acts
     for pair in self.pairs_to_test:
       pair = pair[1]
+      # TODO: training CAV code drops activations until both classes (concept, random) have the same no. samples
+      #  Should do this here so that activations aren't needlessly generated
       acts = self.activation_generator.process_and_load_activations(self.bottlenecks, pair, overwrite=overwrite, n_repeats=self.n_repeats)
       for alpha in self.alphas:
        for bn in self.bottlenecks:

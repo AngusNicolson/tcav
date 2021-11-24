@@ -92,7 +92,7 @@ class ModelWrapper():
         self.ends = self.model(x)
         return self.ends
 
-    def get_gradient(self, x: torch.Tensor, y: int, bottleneck_name: str) -> Tuple[torch.Tensor, ...]:
+    def get_gradient(self, x: torch.Tensor, y: int, bottleneck_name: str) -> torch.Tensor:
         """ Returns the gradient at a given bottle_neck.
         Args:
             x: Model input

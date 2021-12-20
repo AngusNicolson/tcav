@@ -87,7 +87,7 @@ class ActivationGenerator:
                 for sample in dataloader:
                     out_ = self.model(sample[0].to(device))
                     for bn in bottleneck_names:
-                        bns[bn].append(self.model.bottlenecks_tensors[bn].cpu().detach().numpy().squeeze())
+                        bns[bn].append(self.model.bottlenecks_tensors[bn].cpu().detach().numpy())
                     del out_
 
         bns = {k: np.concatenate(v) for k, v in bns.items()}

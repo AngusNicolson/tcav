@@ -61,6 +61,8 @@ class CAV(object):
               save_dict['hparams'], save_dict['saved_path'])
     cav.accuracies = save_dict['accuracies']
     cav.cavs = save_dict['cavs']
+    if "intercept" in save_dict.keys():
+      cav.intercept = save_dict["intercept"]
     return cav
 
   @staticmethod
@@ -145,6 +147,7 @@ class CAV(object):
     self.bottleneck = bottleneck
     self.hparams = hparams
     self.save_path = save_path
+    self.intercept = None
 
   def train(self, acts):
     """Train the CAVs from the activations.
@@ -157,6 +160,8 @@ class CAV(object):
     Raises:
       ValueError: if the model_type in hparam is not compatible.
     """
+
+    print('training with alpha={}'.format(self.hparams['alpha']))
 
     x, labels, labels2text = CAV._create_cav_training_set(
         self.concepts, self.bottleneck, acts)
@@ -174,6 +179,7 @@ class CAV(object):
       # if there were only two labels, the concept is assigned to label 0 by
       # default. So we flip the coef_ to reflect this.
       self.cavs = [-1 * lm.coef_[0], lm.coef_[0]]
+      self.intercept = lm.intercept_[0]
     else:
       self.cavs = [c for c in lm.coef_]
     self._save_cavs()
@@ -219,6 +225,7 @@ class CAV(object):
         'hparams': self.hparams,
         'accuracies': self.accuracies,
         'cavs': self.cavs,
+        'intercept': self.intercept,
         'saved_path': self.save_path
     }
     if self.save_path is not None:
@@ -263,6 +270,7 @@ class CAV(object):
       # overall correctness is weighted by the number of examples in this class.
       num_correct += (sum(idx) * acc[labels2text[class_id]])
     acc['overall'] = float(num_correct) / float(len(y_test))
+
     return acc
 
 

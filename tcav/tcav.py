@@ -192,7 +192,8 @@ class TCAV(object):
     self.n_repeats = n_repeats
 
     if num_random_exp < 2:
-        raise ValueError('The number of random concepts has to be at least 2')
+        print('the number of random concepts has to be at least 2')
+        
     if random_concepts:
       num_random_exp = len(random_concepts)
 
@@ -202,6 +203,7 @@ class TCAV(object):
                                      random_pairs=do_random_pairs)
     # parameters
     self.params = self.get_params()
+
     print(f'TCAV will be run for {len(self.params)} params')
 
   def train_cavs(self, overwrite=False):
@@ -210,8 +212,10 @@ class TCAV(object):
     # Get acts
     for pair in self.pairs_to_test:
       pair = pair[1]
+
       # TODO: training CAV code drops activations until both classes (concept, random) have the same no. samples
       #  Should do this here so that activations aren't needlessly generated
+
       acts = self.activation_generator.process_and_load_activations(self.bottlenecks, pair, overwrite=overwrite, n_repeats=self.n_repeats)
       for alpha in self.alphas:
        for bn in self.bottlenecks:
@@ -235,7 +239,9 @@ class TCAV(object):
       results: an object (either a Results proto object or a list of
         dictionaries) containing metrics for TCAV results.
     """
+
     print(f'Running {len(self.params)} params')
+
     results = []
     now = time.time()
     i = 0
@@ -275,6 +281,7 @@ class TCAV(object):
     mymodel = param.model
     cav_dir = param.cav_dir
     # first check if target class is in model.
+
 
     print(f'Running {target_class} {concepts}')
 
@@ -399,6 +406,8 @@ class TCAV(object):
     for bottleneck in self.bottlenecks:
       for target_in_test, concepts_in_test in self.pairs_to_test:
         for alpha in self.alphas:
+          print(f'{bottleneck} {concepts_in_test} {target_in_test} {alpha}')
+
           params.append(
               run_params.RunParams(bottleneck, concepts_in_test, target_in_test,
                                    self.activation_generator, self.cav_dir,

@@ -92,7 +92,7 @@ class ModelWrapper():
         self.ends = self.model(x)
         return self.ends
 
-    def get_gradient(self, x: torch.Tensor, y: int, bottleneck_name: str) -> Tuple[torch.Tensor, ...]:
+    def get_gradient(self, x: torch.Tensor, y: int, bottleneck_name: str) -> torch.Tensor:
         """ Returns the gradient at a given bottle_neck.
         Args:
             x: Model input
@@ -111,7 +111,7 @@ class ModelWrapper():
         return self.labels.index(label)
 
 
-def create_model(freeze_weights=False):
+def create_model(freeze_weights=False, n_classes=13):
     model = models.resnet50(pretrained=True)
 
     if freeze_weights:
@@ -121,6 +121,6 @@ def create_model(freeze_weights=False):
     # NB: Newly initialised layers have requires_grad=True
     model.fc = torch.nn.Sequential(
         torch.nn.Dropout(0.5),
-        torch.nn.Linear(2048, 13)
+        torch.nn.Linear(2048, n_classes)
     )
     return model

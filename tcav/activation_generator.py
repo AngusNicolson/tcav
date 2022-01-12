@@ -130,7 +130,8 @@ class ActivationGenerator:
         dataset = self.dataset_class(self.concept_dict, concept, prefix=self.prefix)
         dataloader = DataLoader(dataset, n, shuffle=shuffle, num_workers=self.num_workers)
         for sample in dataloader:
-            imgs, ids = sample
+            imgs = sample[0]
+            ids = sample[1]
             break
 
         if return_ids:

@@ -111,16 +111,16 @@ class ModelWrapper():
         return self.labels.index(label)
 
 
-def create_model(freeze_weights=False, n_classes=13):
+def create_model(freeze_weights=False, n_classes=13, imagenet=False):
     model = models.resnet50(pretrained=True)
 
     if freeze_weights:
         for param in model.parameters():
             param.requires_grad = False
-
-    # NB: Newly initialised layers have requires_grad=True
-    model.fc = torch.nn.Sequential(
-        torch.nn.Dropout(0.5),
-        torch.nn.Linear(2048, n_classes)
-    )
+    if not imagenet:
+        # NB: Newly initialised layers have requires_grad=True
+        model.fc = torch.nn.Sequential(
+            torch.nn.Dropout(0.5),
+            torch.nn.Linear(2048, n_classes)
+        )
     return model

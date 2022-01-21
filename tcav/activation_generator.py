@@ -40,23 +40,12 @@ class ActivationGenerator:
         """
         self.model = model
         self.model.model.to(device)
-        self.source_json = Path(source_json)
         self.prefix = prefix
         self.acts_dir = Path(acts_dir)
         self.dataset_class = dataset_class
         self.max_examples = max_examples
         self.shape = model.shape
         self.num_workers = num_workers
-
-        with open(self.source_json, "r") as fp:
-            self.concept_dict = json.load(fp)
-
-        # Reduce size of each concept to max_examples
-        self.concept_dict = {
-            out_k: {
-                k: v[:self.max_examples] if type(v) == list else v for k, v in out_v.items()
-            } for out_k, out_v in self.concept_dict.items()
-        }
 
     def get_model(self):
         return self.model
@@ -78,7 +67,7 @@ class ActivationGenerator:
 
     def get_activations_for_concept(self, concept, bottleneck_names, batch_size=32, shuffle=True, n_repeats=1):
         """Get's activations for specified bottlenecks as np.arrays with no gradients"""
-        dataset = self.dataset_class(self.concept_dict, concept, prefix=self.prefix)
+        dataset = self.dataset_class(concept, prefix=self.prefix)
         self.model.eval()
         bns = {bn: [] for bn in bottleneck_names}
         for i in range(n_repeats):
@@ -127,7 +116,7 @@ class ActivationGenerator:
     def get_examples_for_concept(self, concept, n=None, shuffle=False, return_ids=False):
         if n is None:
             n = self.max_examples
-        dataset = self.dataset_class(self.concept_dict, concept, prefix=self.prefix)
+        dataset = self.dataset_class(concept, prefix=self.prefix)
         dataloader = DataLoader(dataset, n, shuffle=shuffle, num_workers=self.num_workers)
         for sample in dataloader:
             imgs = sample[0]

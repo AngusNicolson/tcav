@@ -177,6 +177,7 @@ class TCAV(object):
                        names will be random500_{i} for i in num_random_exp.
                        Relative TCAV can be performed by passing in the same
                        value for both concepts and random_concepts.
+      do_random_pairs: Whether to train CAVs for random samples i vs random samples j (i!=j)
       n_repeats: Load dataset n_repeats times for CAV training (for use with augmentations)
     """
     self.target = target

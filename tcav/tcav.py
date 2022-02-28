@@ -208,7 +208,6 @@ class TCAV(object):
     print(f'TCAV will be run for {len(self.params)} params')
 
   def train_cavs(self, overwrite=False):
-    # TODO: Don't load activations if CAVs already trained
     t0 = time.time()
     # Get acts
     for pair in self.pairs_to_test:
@@ -217,7 +216,21 @@ class TCAV(object):
       # TODO: training CAV code drops activations until both classes (concept, random) have the same no. samples
       #  Should do this here so that activations aren't needlessly generated
 
-      acts = self.activation_generator.process_and_load_activations(self.bottlenecks, pair, overwrite=overwrite, n_repeats=self.n_repeats)
+      # If all CAVs for pair have already been created, save compute time by not loading the activations
+      cav_paths = []
+      cav_hparams = CAV.default_hparams()
+      for alpha in self.alphas:
+        for bn in self.bottlenecks:
+          cav_path = Path(self.cav_dir) / (
+                      CAV.cav_key(pair, bn, cav_hparams['model_type'], alpha).replace('/', '.') + '.pkl')
+          cav_paths.append(cav_path)
+
+      if all([cav_path.exists() for cav_path in cav_paths]) and not overwrite:
+        acts = None
+      else:
+        acts = self.activation_generator.process_and_load_activations(self.bottlenecks, pair, overwrite=overwrite, n_repeats=self.n_repeats)
+
+      # Train or load CAVs
       for alpha in self.alphas:
        for bn in self.bottlenecks:
         cav_hparams = CAV.default_hparams()

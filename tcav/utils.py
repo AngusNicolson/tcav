@@ -14,37 +14,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from pathlib import Path
 from scipy.stats import ttest_ind
 import numpy as np
-import tensorflow as tf
 from tcav.tcav_results.results_pb2 import Result, Results
+import torch
+
+# Grab a GPU if there is one
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+    print("Using {} device: {}".format(device, torch.cuda.current_device()))
+else:
+    device = torch.device("cpu")
+    print("Using {}".format(device))
 
 _KEYS = [
     "cav_key", "cav_concept", "negative_concept", "target_class", "i_up",
     "val_directional_dirs_abs_mean", "val_directional_dirs_mean",
     "val_directional_dirs_std", "note", "alpha", "bottleneck"
 ]
-
-
-def create_session(timeout=10000, interactive=True):
-  """Create a tf session for the model.
-  # This function is slight motification of code written by Alex Mordvintsev
-
-  Args:
-    timeout: tfutil param.
-
-  Returns:
-    TF session.
-  """
-  graph = tf.Graph()
-  config = tf.compat.v1.ConfigProto()
-  config.gpu_options.allow_growth = True
-  config.operation_timeout_in_ms = int(timeout*1000)
-  if interactive:
-    return tf.compat.v1.InteractiveSession(graph=graph, config=config)
-  else:
-    return tf.compat.v1.Session(graph=graph, config=config)
-
 
 def flatten(nested_list):
   """Flatten a nested list."""
@@ -97,7 +85,7 @@ def process_what_to_run_expand(pairs_to_test,
     elif len(concept_set) > 1:
       new_pairs_to_test_t.append((target, concept_set))
     else:
-      tf.compat.v1.logging.info('PAIR NOT PROCCESSED')
+      print('PAIR NOT PROCCESSED')
     new_pairs_to_test.extend(new_pairs_to_test_t)
 
   all_concepts = list(set(flatten([cs + [tc] for tc, cs in new_pairs_to_test])))
@@ -227,8 +215,8 @@ def print_results(results, random_counterpart=None, random_concepts=None, num_ra
 
 
 def make_dir_if_not_exists(directory):
-  if not tf.io.gfile.exists(directory):
-    tf.io.gfile.makedirs(directory)
+  path_dir = Path(directory)
+  path_dir.mkdir(exist_ok=True, parents=True)
 
 
 def result_to_proto(result):

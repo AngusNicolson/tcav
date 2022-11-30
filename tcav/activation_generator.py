@@ -13,263 +13,128 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from abc import ABCMeta
-from abc import abstractmethod
-from multiprocessing import dummy as multiprocessing
-import os
-import os.path
+import itertools
+import json
 import numpy as np
-import PIL.Image
-import six
-import tensorflow as tf
+import torch
+from pathlib import Path
+from torch.utils.data import DataLoader
 
-class ActivationGeneratorInterface(six.with_metaclass(ABCMeta, object)):
-  """Interface for an activation generator for a model"""
-
-  @abstractmethod
-  def process_and_load_activations(self, bottleneck_names, concepts):
-    pass
-
-  @abstractmethod
-  def get_model(self):
-    pass
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+    print("Using {} device: {}".format(device, torch.cuda.current_device()))
+else:
+    device = torch.device("cpu")
+    print("Using {}".format(device))
 
 
-class ActivationGeneratorBase(ActivationGeneratorInterface):
-  """Basic abstract activation generator for a model"""
+class ActivationGenerator:
+    """Activation generator for a basic image model"""
+    def __init__(self, model, source_json, acts_dir, dataset_class, max_examples=500, num_workers=0, prefix=""):
+        """
+        source_json (str): Path to a .json with filepaths for each img, categorised by concept
+        dataset_class (Dataset): A dataset Class. Requires inputs:
+                                 json_file (img file paths and metadata),
+                                 split (which data split to use),
+                                 prefix (filepath prefixes)
+        """
+        self.model = model
+        self.model.model.to(device)
+        self.source_json = Path(source_json)
+        self.prefix = prefix
+        self.acts_dir = Path(acts_dir)
+        self.dataset_class = dataset_class
+        self.max_examples = max_examples
+        self.shape = model.shape
+        self.num_workers = num_workers
 
-  def __init__(self, model, acts_dir, max_examples=500):
-    self.model = model
-    self.acts_dir = acts_dir
-    self.max_examples = max_examples
+        with open(self.source_json, "r") as fp:
+            self.concept_dict = json.load(fp)
 
-  def get_model(self):
-    return self.model
+        # Reduce size of each concept to max_examples
+        self.concept_dict = {
+            out_k: {
+                k: v[:self.max_examples] if type(v) == list else v for k, v in out_v.items()
+            } for out_k, out_v in self.concept_dict.items()
+        }
 
-  @abstractmethod
-  def get_examples_for_concept(self, concept):
-    pass
+    def get_model(self):
+        return self.model
 
-  def get_activations_for_concept(self, concept, bottleneck):
-    examples = self.get_examples_for_concept(concept)
-    return self.get_activations_for_examples(examples, bottleneck)
-
-  def get_activations_for_examples(self, examples, bottleneck):
-    acts = self.model.run_examples(examples, bottleneck)
-    return self.model.reshape_activations(acts).squeeze()
-
-  def process_and_load_activations(self, bottleneck_names, concepts):
-    acts = {}
-    if self.acts_dir and not tf.io.gfile.exists(self.acts_dir):
-      tf.io.gfile.makedirs(self.acts_dir)
-
-    for concept in concepts:
-      if concept not in acts:
-        acts[concept] = {}
-      for bottleneck_name in bottleneck_names:
-        acts_path = os.path.join(self.acts_dir, 'acts_{}_{}'.format(
-            concept, bottleneck_name)) if self.acts_dir else None
-        if acts_path and tf.io.gfile.exists(acts_path):
-          with tf.io.gfile.GFile(acts_path, 'rb') as f:
-            acts[concept][bottleneck_name] = np.load(
-                f, allow_pickle=True).squeeze()
-            tf.compat.v1.logging.info('Loaded {} shape {}'.format(
-                acts_path, acts[concept][bottleneck_name].shape))
+    def get_activations_for_examples(self, examples, bottleneck, batch_size=32, grad=False):
+        acts = []
+        if grad:
+            for batch in torch.split(examples, batch_size):
+                out_ = self.model(batch.to(device))
+                del out_
+                acts.append(self.model.bottlenecks_tensors[bottleneck].cpu())
         else:
-          acts[concept][bottleneck_name] = self.get_activations_for_concept(
-              concept, bottleneck_name)
-          if acts_path:
-            tf.compat.v1.logging.info(
-                '{} does not exist, Making one...'.format(acts_path))
-            tf.io.gfile.mkdir(os.path.dirname(acts_path))
-            with tf.io.gfile.GFile(acts_path, 'w') as f:
-              np.save(f, acts[concept][bottleneck_name], allow_pickle=False)
-    return acts
+            with torch.no_grad():
+                for batch in torch.split(examples, batch_size):
+                    out_ = self.model(batch.to(device))
+                    del out_
+                    acts.append(self.model.bottlenecks_tensors[bottleneck].cpu())
+        return torch.cat(acts)
 
+    def get_activations_for_concept(self, concept, bottleneck_names, batch_size=32, shuffle=True, n_repeats=1):
+        """Get's activations for specified bottlenecks as np.arrays with no gradients"""
+        dataset = self.dataset_class(self.concept_dict, concept, prefix=self.prefix)
+        self.model.eval()
+        bns = {bn: [] for bn in bottleneck_names}
+        for i in range(n_repeats):
+            dataloader = DataLoader(dataset, batch_size, shuffle=shuffle, num_workers=self.num_workers)
+            with torch.no_grad():
+                for sample in dataloader:
+                    out_ = self.model(sample[0].to(device))
+                    for bn in bottleneck_names:
+                        bns[bn].append(self.model.bottlenecks_tensors[bn].cpu().detach().numpy())
+                    del out_
 
-class ImageActivationGenerator(ActivationGeneratorBase):
-  """Activation generator for a basic image model"""
+        bns = {k: np.concatenate(v) for k, v in bns.items()}
+        return bns
 
-  def __init__(self,
-               model,
-               source_dir,
-               acts_dir,
-               max_examples=10,
-               normalize_image=True):
-    """Initialize ImageActivationGenerator class."
+    def process_and_load_activations(self, bottleneck_names, concepts, overwrite=False, n_repeats=1):
+        """Load activations if they exist, otherwise run imgs through model to create them and save as np.arrays
 
-    Args:
-      normalize_image: A boolean indicating whether image pixels should be
-        normalized to between 0 and 1.
-    """
-    self.source_dir = source_dir
-    self.normalize_image = normalize_image
-    super(ImageActivationGenerator, self).__init__(model, acts_dir,
-                                                   max_examples)
+        bottleneck_names: Names of bottleneck layers to load activations for as in model.bottlenecks
+        concepts: Concepts to load activations for
+        overwrite: Whether to overwrite activations even if they all exist - activations overwritten either way if any do not exist
+        n_repeats: number of times to load dataset (for use with augmentations)
+        """
+        acts = {}
+        self.acts_dir.mkdir(exist_ok=True, parents=True)
+        self.model.model.to(device)
 
-  def get_examples_for_concept(self, concept):
-    concept_dir = os.path.join(self.source_dir, concept)
-    img_paths = [
-        os.path.join(concept_dir, d) for d in tf.io.gfile.listdir(concept_dir)
-    ]
-    imgs = self.load_images_from_files(
-        img_paths, self.max_examples, shape=self.model.get_image_shape()[:2])
-    return imgs
+        for concept in concepts:
+            if concept not in acts:
+                acts[concept] = {}
+            act_paths = [self.acts_dir / f"acts_{concept}_{bottleneck_name}.npy" for bottleneck_name in bottleneck_names]
+            acts_exist = [path.exists() for path in act_paths]
 
-  def load_image_from_file(self, filename, shape):
-    """Given a filename, try to open the file.
+            # If all the activations exist as a file then load, otherwise get from model
+            if all(acts_exist) and not overwrite:
+                for i, bn in enumerate(bottleneck_names):
+                    acts[concept][bn] = np.load(str(act_paths[i]), allow_pickle=True).squeeze()
+            else:
+                # The dataset is not shuffled for reproducibility
+                # This means the dataset will be loaded in the order it appear in .json
+                # Ensure that this is acceptable (imgs are not ordered in some way)
+                acts[concept] = self.get_activations_for_concept(concept, bottleneck_names, shuffle=False, n_repeats=n_repeats)
+                for i, bn in enumerate(bottleneck_names):
+                    np.save(str(act_paths[i]), acts[concept][bn], allow_pickle=False)
+        return acts
 
-    If failed, return None.
+    def get_examples_for_concept(self, concept, n=None, shuffle=False, return_ids=False):
+        if n is None:
+            n = self.max_examples
+        dataset = self.dataset_class(self.concept_dict, concept, prefix=self.prefix)
+        dataloader = DataLoader(dataset, n, shuffle=shuffle, num_workers=self.num_workers)
+        for sample in dataloader:
+            imgs = sample[0]
+            ids = sample[1]
+            break
 
-    Args:
-      filename: location of the image file
-      shape: the shape of the image file to be scaled
-
-    Returns:
-      the image if succeeds, None if fails.
-
-    Rasies:
-      exception if the image was not the right shape.
-    """
-    if not tf.io.gfile.exists(filename):
-      tf.compat.v1.logging.error('Cannot find file: {}'.format(filename))
-      return None
-    try:
-      # ensure image has no transparency channel
-      img = np.array(
-          PIL.Image.open(tf.io.gfile.GFile(filename,
-                                           'rb')).resize(
-                                               shape, PIL.Image.BILINEAR),
-          dtype=np.float32)
-      if self.normalize_image:
-        # Normalize pixel values to between -1 and 1.
-        img = (img / 127.5) - 1
-      if len(img.shape) != 3:
-          img = np.expand_dims(img, axis=2)
-          img = np.repeat(img, 3, axis=2)
-      if not (len(img.shape) == 3 and img.shape[2] == 3):
-        return None
-      else:
-        return img
-
-    except Exception as e:
-      tf.compat.v1.logging.info(e)
-      return None
-    return img
-
-  def load_images_from_files(self,
-                             filenames,
-                             max_imgs=500,
-                             do_shuffle=True,
-                             run_parallel=True,
-                             shape=(299, 299),
-                             num_workers=50):
-    """Return image arrays from filenames.
-
-    Args:
-      filenames: locations of image files.
-      max_imgs: maximum number of images from filenames.
-      do_shuffle: before getting max_imgs files, shuffle the names or not
-      run_parallel: get images in parallel or not
-      shape: desired shape of the image
-      num_workers: number of workers in parallelization.
-
-    Returns:
-      image arrays
-
-    """
-    imgs = []
-    # First shuffle a copy of the filenames.
-    filenames = filenames[:]
-    if do_shuffle:
-      np.random.shuffle(filenames)
-
-    if run_parallel:
-      pool = multiprocessing.Pool(num_workers)
-      imgs = pool.map(
-          lambda filename: self.load_image_from_file(filename, shape),
-          filenames[:max_imgs])
-      pool.close()
-      imgs = [img for img in imgs if img is not None]
-      if len(imgs) <= 1:
-        raise ValueError(
-            'You must have more than 1 image in each class to run TCAV.')
-    else:
-      for filename in filenames:
-        img = self.load_image_from_file(filename, shape)
-        if img is not None:
-          imgs.append(img)
-        if len(imgs) >= max_imgs:
-          break
-      if len(imgs) <= 1:
-        raise ValueError(
-            'You must have more than 1 image in each class to run TCAV.')
-
-    return np.array(imgs)
-
-
-"""Discrete activation generators"""
-
-
-class DiscreteActivationGeneratorBase(ActivationGeneratorBase):
-  """ Base class for discrete data. """
-
-  def __init__(self, model, source_dir, acts_dir, max_examples):
-    self.source_dir = source_dir
-    super(DiscreteActivationGeneratorBase, self).__init__(
-        model=model, acts_dir=acts_dir, max_examples=max_examples)
-
-  def get_examples_for_concept(self, concept):
-    """Extracts examples for a concept and transforms them to the desired format.
-
-    Args:
-      concept: Name of a concept. Names for the folder containing data for that
-        concept. Path is fetched based on the source_dir used by the activation
-        generator
-
-    Returns:
-          data_parsed:
-            Examples from the data folder. Format is according to the
-            load_data() and transform_data() functions.
-
-    """
-    data = self.load_data(concept)
-    data_parsed = self.transform_data(data)
-    return data_parsed
-
-  @abstractmethod
-  def load_data(self, concept):
-    """Extracts data from a source and returns it in a user specified format.
-
-    It takes in as input the name for a concept folder that lies inside of the
-    source_dir.
-
-    Args
-      concept: name of the concept (e.g., name of a folder that contains concept
-      examples in source_dir). They should be located in source_dir.
-    Returns:
-      data parsed
-    """
-    # Needs to be implemented
-    raise NotImplementedError()
-
-  def transform_data(self, data):
-    """Transforms data into a format that can be directly processed by the model.
-
-    Once the data is parsed, use this function to transform the data into the
-    format your model needs. Some example transformations can be:
-      - Converting to proto type
-      - Encoding categorical features
-      - Tokenizing an input sequence
-
-    Args:
-      data: The previously extracted data from load_data
-
-    Returns:
-      Transformed data, in the desired dormat
-    """
-    # By default, regurgitates input data if not implemented
-    return data
+        if return_ids:
+            return ids, imgs
+        else:
+            return imgs

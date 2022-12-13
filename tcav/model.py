@@ -30,8 +30,8 @@ class ModelWrapper():
         """ Initialize wrapper with model and set up the hooks to the bottlenecks.
         Args:
             model (nn.Module): Model to test
-            bottlenecks (dict): Dictionary attaching names to the layers to
-                hook into. Expects, at least, an input, logit and prediction.
+            bottlenecks (dict): Dictionary attaching names to the layers to hook into. Expects, at least, an input,
+                logit and prediction.
             labels (list): Class labels in order the model expects
         """
         self.ends = None

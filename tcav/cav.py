@@ -125,8 +125,7 @@ class CAV(object):
         [acts[concept][bottleneck].shape[0] for concept in acts.keys()])
 
     for i, concept in enumerate(concepts):
-      x.extend(acts[concept][bottleneck][:min_data_points].reshape(
-          min_data_points, -1))
+      x.extend(acts[concept][bottleneck][:min_data_points].reshape(min_data_points, -1))
       labels.extend([i] * min_data_points)
       labels2text[i] = concept
     x = np.array(x)

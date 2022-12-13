@@ -30,13 +30,15 @@ else:
 
 class ActivationGenerator:
     """Activation generator for a basic image model"""
-    def __init__(self, model, source_json, acts_dir, dataset_class, max_examples=500, num_workers=0, prefix=""):
+    def __init__(self, model, source_json, acts_dir, dataset_class, max_examples=500, num_workers=0, prefix="",
+                 act_func: str = None):
         """
         source_json (str): Path to a .json with filepaths for each img, categorised by concept
         dataset_class (Dataset): A dataset Class. Requires inputs:
                                  json_file (img file paths and metadata),
                                  split (which data split to use),
                                  prefix (filepath prefixes)
+        act_func (str): An optional function to apply to the activations before they are output
         """
         self.model = model
         self.model.model.to(device)
@@ -47,6 +49,8 @@ class ActivationGenerator:
         self.max_examples = max_examples
         self.shape = model.shape
         self.num_workers = num_workers
+
+        self.act_func = self._get_activation_function(act_func)
 
         with open(self.source_json, "r") as fp:
             self.concept_dict = json.load(fp)
@@ -61,19 +65,40 @@ class ActivationGenerator:
     def get_model(self):
         return self.model
 
+    def _get_act(self, bottleneck, cpu=True):
+        act = self.model.bottlenecks_tensors[bottleneck]
+        if self.act_func is not None:
+            act = self.act_func(act)
+        if cpu:
+            act = act.cpu()
+        return act
+
+    def _get_activation_function(self, act_func: str):
+        if act_func is None:
+            act_func = None
+        elif act_func == "maxpool":
+            act_func = torch.nn.AdaptiveMaxPool2d(1)
+        elif act_func == "avgpool":
+            act_func = torch.nn.AdaptiveAvgPool2d(1)
+        else:
+            raise NotImplementedError(f"act_func {act_func} not recognised.")
+        return act_func
+
+    def _get_activations_for_examples(self, examples, bottleneck, batch_size=32):
+        acts = []
+        for batch in torch.split(examples, batch_size):
+            out_ = self.model(batch.to(device))
+            del out_
+            acts.append(self._get_act(bottleneck))
+        return acts
+
     def get_activations_for_examples(self, examples, bottleneck, batch_size=32, grad=False):
         acts = []
         if grad:
-            for batch in torch.split(examples, batch_size):
-                out_ = self.model(batch.to(device))
-                del out_
-                acts.append(self.model.bottlenecks_tensors[bottleneck].cpu())
+            self._get_activations_for_examples(examples, bottleneck, batch_size)
         else:
             with torch.no_grad():
-                for batch in torch.split(examples, batch_size):
-                    out_ = self.model(batch.to(device))
-                    del out_
-                    acts.append(self.model.bottlenecks_tensors[bottleneck].cpu())
+                self._get_activations_for_examples(examples, bottleneck, batch_size)
         return torch.cat(acts)
 
     def get_activations_for_concept(self, concept, bottleneck_names, batch_size=32, shuffle=True, n_repeats=1):
@@ -87,7 +112,7 @@ class ActivationGenerator:
                 for sample in dataloader:
                     out_ = self.model(sample[0].to(device))
                     for bn in bottleneck_names:
-                        bns[bn].append(self.model.bottlenecks_tensors[bn].cpu().detach().numpy())
+                        bns[bn].append(self._get_act(bn).detach().numpy())
                     del out_
 
         bns = {k: np.concatenate(v) for k, v in bns.items()}

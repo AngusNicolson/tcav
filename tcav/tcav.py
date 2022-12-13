@@ -24,6 +24,7 @@ from tcav import utils
 import numpy as np
 import time
 from tcav.utils import device
+from torch.nn.functional import adaptive_avg_pool2d
 
 
 class TCAV(object):
@@ -97,7 +98,7 @@ class TCAV(object):
       return float(count) / float(len(examples))
 
   @staticmethod
-  def get_gradients(mymodel, target_class, bottleneck, examples):
+  def get_gradients(mymodel, target_class, bottleneck, examples, act_func=None):
     """Return the list of gradients.
 
     Args:
@@ -107,6 +108,7 @@ class TCAV(object):
     bottleneck: bottleneck layer name
     examples: an array of examples of the target class where examples[i]
       corresponds to class_acts[i]
+    act_func (callable): Optional function to be applied to the gradients before returning
 
     Returns:
     list of gradients
@@ -115,7 +117,10 @@ class TCAV(object):
     grads = []
     for i in range(len(examples)):
       example = examples[i].to(device)
-      grads.append(np.reshape(mymodel.get_gradient(example, class_id, bottleneck).cpu(), -1))
+      grad = mymodel.get_gradient(example, class_id, bottleneck).cpu()
+      if act_func is not None:
+          grad = adaptive_avg_pool2d(grad, 1)
+      grads.append(np.reshape(grad, -1))
     return grads
 
   @staticmethod
@@ -265,7 +270,8 @@ class TCAV(object):
         if grad_path.exists() and not overwrite:
             gradients = np.load(str(grad_path), allow_pickle=True)
         else:
-            gradients = self.get_gradients(self.mymodel, self.target, bottleneck, examples)
+            gradients = self.get_gradients(self.mymodel, self.target, bottleneck, examples,
+                                           act_func=self.activation_generator.act_func)
             gradients = np.stack(gradients)
             np.save(str(grad_path), gradients, allow_pickle=False)
         for param in self.params:
@@ -294,9 +300,6 @@ class TCAV(object):
     alpha = param.alpha
     mymodel = param.model
     cav_dir = param.cav_dir
-    # first check if target class is in model.
-
-
     print(f'Running {target_class} {concepts}')
 
     # Get CAVs
@@ -309,7 +312,6 @@ class TCAV(object):
 
     # Hypo testing
     cav_concept = concepts[0]
-
     val_directional_dirs = [
         np.dot(grad, cav_instance.get_direction(cav_concept)) for grad in gradients
     ]

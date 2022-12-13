@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 
 # helper function to output plot and write summary data
 def plot_results(results, random_counterpart=None, random_concepts=None, num_random_exp=100,
-    min_p_val=0.05, show=True, title=None):
+    min_p_val=0.05, show=True, title=None, figsize=(6.4, 4.8)):
   """Helper function to organize results.
   When run in a notebook, outputs a matplotlib bar plot of the
   TCAV scores for all bottlenecks for each concept, replacing the
@@ -38,6 +38,7 @@ def plot_results(results, random_counterpart=None, random_concepts=None, num_ran
     random_concepts: list of random experiments that were run. 
     num_random_exp: number of random experiments that were run.
     min_p_val: minimum p value for statistical significance
+    figsize: The size of the figure
   """
 
   # helper function, returns if this is a random concept
@@ -132,7 +133,7 @@ def plot_results(results, random_counterpart=None, random_concepts=None, num_ran
   index = np.arange(num_concepts) * bar_width * (num_bottlenecks + 1)
 
   # matplotlib
-  fig, ax = plt.subplots()
+  fig, ax = plt.subplots(figsize=figsize)
     
   # draw all bottlenecks individually
   for i, [bn, vals] in enumerate(plot_data.items()):
@@ -153,6 +154,7 @@ def plot_results(results, random_counterpart=None, random_concepts=None, num_ran
   ax.set_ylabel('TCAV Score')
   ax.set_ylim([0, 1])
   ax.set_xticks(index + num_bottlenecks * bar_width / 2)
+  ax.axhline(0.5, color="gray", alpha=0.6, linestyle="--")
   ax.set_xticklabels(plot_concepts)
   ax.legend()
   fig.tight_layout()

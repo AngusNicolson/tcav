@@ -68,7 +68,7 @@ def main(args):
     ):
         for c, concept in enumerate(concepts):
             plot_visualisation_array(
-                imgs, values, concept, c, name, bottlenecks, img_out_dir
+                imgs, values, c, f"{concept}/{name}", bottlenecks, img_out_dir
             )
 
     print("Done!")

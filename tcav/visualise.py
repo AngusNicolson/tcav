@@ -91,7 +91,7 @@ def plot_avg_cav_visualisation(
 
 
 def plot_visualisation_array(
-    imgs, values, concept, concept_idx, name, bottlenecks, img_out_dir
+    imgs, values, concept_idx, name, bottlenecks, img_out_dir
 ):
     fig, axes = plt.subplots(
         len(bottlenecks),
@@ -112,7 +112,7 @@ def plot_visualisation_array(
             if j == len(row) - 1:
                 fig.colorbar(s, ax=ax, fraction=0.046, pad=0.04)
     plt.tight_layout()
-    plt.savefig(img_out_dir / concept / f"{name}_array.png")
+    plt.savefig(img_out_dir / f"{name}_array.png")
 
 
 def load_img(path):

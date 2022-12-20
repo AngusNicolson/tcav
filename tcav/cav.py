@@ -368,7 +368,7 @@ def get_cav_direction(param):
         concepts, bottleneck, cav_hparams["model_type"], cav_hparams["alpha"]
     )
 
-    cav_path = cav_dir / (a_cav_key.replace("/", ".") + ".pkl")
+    cav_path = Path(cav_dir) / (a_cav_key.replace("/", ".") + ".pkl")
     cav_instance = CAV.load_cav(cav_path)
     cav_concept = concepts[0]
     direction = cav_instance.get_direction(cav_concept)

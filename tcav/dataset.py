@@ -1,4 +1,3 @@
-
 import json
 from typing import Union, Callable
 from copy import deepcopy
@@ -12,7 +11,14 @@ import torchvision.transforms as T
 class JsonDataset(Dataset):
     """json dataset. Define dataset using a .json which splits the images by train/val/test or concept"""
 
-    def __init__(self, json_file: Union[str, dict], split: str = "train", prefix: str = None, transform: Callable = None, load_img: bool = True):
+    def __init__(
+        self,
+        json_file: Union[str, dict],
+        split: str = "train",
+        prefix: str = None,
+        transform: Callable = None,
+        load_img: bool = True,
+    ):
         """
         Args:
             json_file (string): Path to the json metadata file.
@@ -27,11 +33,13 @@ class JsonDataset(Dataset):
         self.metadata_labels = ["label"]
 
         if self.transform is None:
-            self.transform = T.Compose([
-                T.ToTensor(),
-                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-                T.Resize((224, 224))
-            ])
+            self.transform = T.Compose(
+                [
+                    T.ToTensor(),
+                    T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                    T.Resize((224, 224)),
+                ]
+            )
 
         if type(json_file) == dict:
             self.metadata = deepcopy(json_file)

@@ -11,7 +11,7 @@ def get_all_responses(
 ):
     examples = act_generator.get_examples_for_concept(target)
     params = {}
-    for bn in mytcav.bottlenecks.values():
+    for bn in mytcav.bottlenecks:
         params[bn] = [v for v in mytcav.params if v.bottleneck == bn]
 
     target_id = mymodel.label_to_id(target)

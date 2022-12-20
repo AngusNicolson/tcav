@@ -316,3 +316,11 @@ def dot_product(v, cav):
     cav (np.Array): Direction of the CAV (D,)
     """
     return np.dot(v[0].T, cav).T
+
+
+def cosine_sim(grad, cav):
+    v = dot_product(grad, cav)
+    norms = np.linalg.norm(grad[0], axis=0)
+    cav_norm = np.linalg.norm(cav)
+    v = v / (norms * cav_norm)
+    return v

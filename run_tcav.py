@@ -107,6 +107,7 @@ def make_dirs(args):
     results_dir = source_dir / f"results/{args.exp_name}"
 
     dirs = {
+        "source": source_dir,
         "activation": activation_dir,
         "working": working_dir,
         "cav": cav_dir,

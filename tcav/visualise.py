@@ -32,7 +32,7 @@ def get_all_responses(
             act = mymodel.bottlenecks_tensors[bn].cpu().detach().numpy()
             for concept in concepts:
                 act_dot, directional_derivatives = get_avg_cav_responses_for_concept(
-                    concept, params, act, grad
+                    concept, bn_params, act, grad
                 )
                 bn_acts.append(act_dot)
                 bn_grads.append(directional_derivatives)

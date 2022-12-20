@@ -288,3 +288,31 @@ def results_to_proto(results):
     for result in results:
         results_proto.results.append(result_to_proto(result))
     return results_proto
+
+
+def get_cav_accuracies_from_results(results, concepts, bottlenecks):
+    all_acc_means = {}
+    all_acc_stds = {}
+    for concept in concepts:
+        accs = {}
+        for bn in bottlenecks.keys():
+            accs[bn] = [
+                v["cav_accuracies"]["overall"]
+                for v in results
+                if (v["bottleneck"] == bn) and (v["cav_concept"] == concept)
+            ]
+        accs = np.array(list(accs.values()))
+        accs_mean = accs.mean(axis=1)
+        accs_std = accs.std(axis=1)
+
+        all_acc_means[concept] = accs_mean
+        all_acc_stds[concept] = accs_std
+    return all_acc_means, all_acc_stds
+
+
+def dot_product(v, cav):
+    """Calculate the dot product for each 1x1xD block of activations
+    v (np.Array): Gradient or activations of a single sample (H,W,D)
+    cav (np.Array): Direction of the CAV (D,)
+    """
+    return np.dot(v[0].T, cav).T

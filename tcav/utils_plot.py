@@ -196,3 +196,14 @@ def plot_results(
     if show:
         plt.show()
     return fig
+
+
+def plot_cav_accuracies(acc_means, concepts, bottlenecks):
+    fig, ax = plt.subplots()
+    for concept in concepts:
+        ax.plot(list(bottlenecks.keys()), acc_means[concept], label=concept)
+    ax.set_xlabel("Layer")
+    ax.set_ylabel("Accuracy")
+    ax.tick_params(axis="x", rotation=45)
+    plt.legend(frameon=False)
+    return fig, ax

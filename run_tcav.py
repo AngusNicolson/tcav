@@ -16,42 +16,61 @@ import tcav.utils_plot as utils_plot  # utils_plot requires matplotlib
 
 
 def main(args):
-    exp_name = args.exp_name
-    num_random_exp = args.num_rand
-    target = args.target
     concepts = [v.strip() for v in args.concepts.split(",")]
     # this is a regularizer penalty parameter for linear classifier to get CAVs.
     alphas = [0.1]
-    max_examples = args.max_examples
-    num_workers = args.num_workers
-    act_func = args.act_func
-    overwrite = args.overwrite
-
-    working_dir = Path(args.working_dir) / act_func
-    activation_dir = working_dir / "activations"
-    cav_dir = working_dir / "cavs"
-    grad_dir = working_dir / "grads"
-
-    source_dir = Path(args.source_dir)  # '/home/lina3782/labs/explain/imagenet'
+    dirs = make_dirs(args)
     bottlenecks = [bn.strip() for bn in args.layers.split(",")]
     bottlenecks = {bn: bn for bn in bottlenecks}
 
-    results_dir = source_dir / f"results/{exp_name}"
-
-    for d in [activation_dir, working_dir, cav_dir, grad_dir, results_dir]:
-        d.mkdir(exist_ok=True, parents=True)
-
     model = create_model()
-    label_path = source_dir / "class_names.txt"
-    with open(label_path, "r") as fp:
-        class_names = fp.read()
-    class_names = class_names.split("\n")
-    class_names_short = [v.split(",")[0] for v in class_names]
-    mymodel = ModelWrapper(model, bottlenecks, class_names_short)
+    class_names = get_class_names(dirs["source"])
+    mymodel = ModelWrapper(model, bottlenecks, class_names)
 
-    data_path = source_dir / "data"
-    source_json = create_source_json(target, concepts, num_random_exp, data_path)
-    source_json_path = results_dir / "source.json"
+    act_generator = get_act_gen(args, dirs, mymodel, concepts)
+
+    mytcav = tcav.TCAV(
+        args.target,
+        concepts,
+        bottlenecks,
+        act_generator,
+        alphas,
+        cav_dir=dirs["cav"],
+        num_random_exp=args.num_rand,
+        do_random_pairs=True,
+        grad_dir=dirs["grad"],
+    )
+
+    print("Training CAVs...")
+    print("This may take a while... Go get coffee!")
+    mytcav.train_cavs(overwrite=args.overwrite)
+    print("Training complete!")
+
+    print("Running TCAV...")
+    results = mytcav.run(overwrite=args.overwrite)
+
+    fig = utils_plot.plot_results(
+        results, num_random_exp=args.num_rand, figsize=(10, 5), show=False
+    )
+    plt.savefig(dirs["results"] / f"{args.target}_tcav_scores.png")
+
+    with open(dirs["results"] / f"{args.target}.json", "w") as fp:
+        json.dump(results, fp, indent=2)
+
+    acc_means, acc_stds = utils.get_cav_accuracies_from_results(
+        results, concepts, bottlenecks
+    )
+
+    fig, ax = utils_plot.plot_cav_accuracies(acc_means, concepts, bottlenecks)
+    plt.savefig(dirs["results"] / f"cav_accuracies.png")
+
+    print("Done!")
+
+
+def get_act_gen(args, dirs, mymodel, concepts):
+    data_path = dirs["source"] / "data"
+    source_json = create_source_json(args.target, concepts, args.num_rand, data_path)
+    source_json_path = dirs["results"] / "source.json"
     with open(source_json_path, "w") as fp:
         json.dump(source_json, fp, indent=2)
 
@@ -59,70 +78,45 @@ def main(args):
     act_generator = act_gen.ActivationGenerator(
         mymodel,
         source_json_path,
-        activation_dir,
+        dirs["activation"],
         JsonDataset,
-        max_examples=max_examples,
+        max_examples=args.max_examples,
         prefix=prefix,
-        num_workers=num_workers,
-        act_func=act_func,
+        num_workers=args.num_workers,
+        act_func=args.act_func,
     )
+    return act_generator
 
-    mytcav = tcav.TCAV(
-        target,
-        concepts,
-        bottlenecks,
-        act_generator,
-        alphas,
-        cav_dir=cav_dir,
-        num_random_exp=num_random_exp,
-        do_random_pairs=True,
-        grad_dir=grad_dir,
-    )
 
-    print("Training CAVs...")
-    print("This may take a while... Go get coffee!")
-    mytcav.train_cavs(overwrite=overwrite)
-    print("Training complete!")
+def get_class_names(source_dir):
+    label_path = source_dir / "class_names.txt"
+    with open(label_path, "r") as fp:
+        class_names = fp.read()
+    class_names = class_names.split("\n")
+    # Use shortened version for ImageNet because sometimes the list is very long
+    class_names_short = [v.split(",")[0] for v in class_names]
+    return class_names_short
 
-    print("Running TCAV...")
-    results = mytcav.run(overwrite=overwrite)
 
-    fig = utils_plot.plot_results(
-        results, num_random_exp=num_random_exp, figsize=(10, 5), show=False
-    )
-    fig.axes[0].axhline(0.5, color="gray", alpha=0.8, linestyle="--")
-    plt.savefig(results_dir / f"{target}_tcav_scores.png")
+def make_dirs(args):
+    working_dir = Path(args.working_dir) / args.exp_name
+    activation_dir = working_dir / "activations"
+    cav_dir = working_dir / "cavs"
+    grad_dir = working_dir / "grads"
+    source_dir = Path(args.source_dir)
+    results_dir = source_dir / f"results/{args.exp_name}"
 
-    with open(results_dir / f"{target}.json", "w") as fp:
-        json.dump(results, fp, indent=2)
+    dirs = {
+        "activation": activation_dir,
+        "working": working_dir,
+        "cav": cav_dir,
+        "grad": grad_dir,
+        "results": results_dir,
+    }
 
-    all_acc_means = {}
-    all_acc_stds = {}
-    for concept in concepts:
-        accs = {}
-        for bn in bottlenecks.keys():
-            accs[bn] = [
-                v["cav_accuracies"]["overall"]
-                for v in results
-                if (v["bottleneck"] == bn) and (v["cav_concept"] == concept)
-            ]
-        accs = np.array(list(accs.values()))
-        accs_mean = accs.mean(axis=1)
-        accs_std = accs.std(axis=1)
-
-        all_acc_means[concept] = accs_mean
-        all_acc_stds[concept] = accs_std
-
-    fig, ax = plt.subplots()
-    for concept in concepts:
-        ax.plot(list(bottlenecks.keys()), all_acc_means[concept], label=concept)
-    ax.set_xlabel("Layer")
-    ax.set_ylabel("Accuracy")
-    ax.tick_params(axis="x", rotation=45)
-    plt.legend(frameon=False)
-    plt.savefig(results_dir / f"cav_accuracies.png")
-
-    print("Done!")
+    for d in dirs.values():
+        d.mkdir(exist_ok=True, parents=True)
+    return dirs
 
 
 def create_model(dataset="imagenet"):

@@ -8,86 +8,96 @@ import matplotlib.pyplot as plt
 from torchvision import models
 
 from tcav.model import ModelWrapper
-from tcav.dataset import JsonDataset
-import tcav.activation_generator as act_gen
-from tcav.cav import CAV
+from tcav.cav import get_avg_cav
 import tcav.tcav as tcav
+from tcav.utils import dot_product
+from run_tcav import make_dirs, get_class_names, get_act_gen
 
 
 def main(args):
-    exp_name = args.exp_name
-    num_random_exp = args.num_rand
-    target = args.target
     concepts = [v.strip() for v in args.concepts.split(",")]
     # this is a regularizer penalty parameter for linear classifier to get CAVs.
     alphas = [0.1]
-    max_examples = args.max_examples
-    num_workers = args.num_workers
-    act_func = args.act_func
-
-    working_dir = Path(args.working_dir) / act_func
-    activation_dir = working_dir / "activations"
-    cav_dir = working_dir / "cavs"
-    grad_dir = working_dir / "grads"
-
-    source_dir = Path(args.source_dir)  # '/home/lina3782/labs/explain/imagenet'
-    bottlenecks = [bn.strip() for bn in args.layers.split(",")]
-    bottlenecks = {bn: bn for bn in bottlenecks}
-
-    results_dir = source_dir / f"results/{exp_name}"
-    img_out_dir = results_dir / f"visualisations/{target}"
+    dirs = make_dirs(args)
+    img_out_dir = dirs["results"] / f"visualisations/{args.target}"
     for concept in concepts:
         d = img_out_dir / concept
         d.mkdir(exist_ok=True, parents=True)
 
-    for d in [activation_dir, working_dir, cav_dir, grad_dir, results_dir, img_out_dir]:
-        d.mkdir(exist_ok=True, parents=True)
+    bottlenecks = [bn.strip() for bn in args.layers.split(",")]
+    bottlenecks = {bn: bn for bn in bottlenecks}
 
     model = create_model()
-    label_path = source_dir / "class_names.txt"
-    with open(label_path, "r") as fp:
-        class_names = fp.read()
-    class_names = class_names.split("\n")
-    class_names_short = [v.split(",")[0] for v in class_names]
-    mymodel = ModelWrapper(model, bottlenecks, class_names_short)
+    class_names = get_class_names(dirs["source"])
+    mymodel = ModelWrapper(model, bottlenecks, class_names)
 
-    data_path = source_dir / "data"
-
-    source_json_path = results_dir / "source.json"
-    with open(source_json_path, "r") as fp:
-        source_json = json.load(fp)
-
-    prefix = str(data_path) + "/"
-    act_generator = act_gen.ActivationGenerator(
-        mymodel,
-        source_json_path,
-        activation_dir,
-        JsonDataset,
-        max_examples=max_examples,
-        prefix=prefix,
-        num_workers=num_workers,
-        act_func=act_func,
-    )
+    act_generator = get_act_gen(args, dirs, mymodel, concepts)
+    data_path = Path(act_generator.prefix)
 
     mytcav = tcav.TCAV(
-        target,
+        args.target,
         concepts,
         bottlenecks,
         act_generator,
         alphas,
-        cav_dir=cav_dir,
-        num_random_exp=num_random_exp,
+        cav_dir=dirs["cav"],
+        num_random_exp=args.num_rand,
         do_random_pairs=False,
-        grad_dir=grad_dir,
+        grad_dir=dirs["grad"],
     )
 
-    target_id = mymodel.label_to_id(target)
+    imgs, all_dot_acts, all_directional_derivatives = plot_all_visualisations(
+        args.target, mytcav, act_generator, concepts, mymodel, data_path, img_out_dir
+    )
+
+    bottlenecks = list(mytcav.bottlenecks.values())
+    for values, name in zip(
+        [all_dot_acts, all_directional_derivatives],
+        ["act_dot", "directional_derivative"],
+    ):
+        for c, concept in enumerate(concepts):
+            plot_visualisation_array(
+                imgs, values, concept, c, name, bottlenecks, img_out_dir
+            )
+
+    print("Done!")
+
+
+def plot_visualisation_array(
+    imgs, values, concept, concept_idx, name, bottlenecks, img_out_dir
+):
+    fig, axes = plt.subplots(
+        len(bottlenecks),
+        len(imgs),
+        figsize=(2 * len(imgs), 2 * len(bottlenecks)),
+    )
+    for i, row in enumerate(axes):
+        bn = bottlenecks[i]
+        all_vs = [values[j][bn][concept_idx] for j in range(len(row))]
+        max_v = max([np.abs(v).max() for v in all_vs])
+        for j, ax in enumerate(row):
+            ax.imshow(imgs[j])
+            act_rescaled = rescale_array(values[j][bn][concept_idx], imgs[j])
+            s = ax.imshow(
+                act_rescaled, alpha=0.4, cmap="seismic", vmin=-max_v, vmax=max_v
+            )
+            ax.axis("off")
+            if j == len(row) - 1:
+                fig.colorbar(s, ax=ax, fraction=0.046, pad=0.04)
+    plt.tight_layout()
+    plt.savefig(img_out_dir / concept / f"{name}_array.png")
+
+
+def plot_all_visualisations(
+    target, mytcav, act_generator, concepts, mymodel, data_path, img_out_dir
+):
     examples = act_generator.get_examples_for_concept(target)
-    img_paths = [v["path"] for v in source_json[target].values()]
+    img_paths = [v["path"] for v in act_generator.concept_dict[target].values()]
     params = {}
-    for bn in bottlenecks:
+    for bn in mytcav.bottlenecks.values():
         params[bn] = [v for v in mytcav.params if v.bottleneck == bn]
 
+    target_id = mymodel.label_to_id(target)
     imgs = []
     all_directional_derivatives = []
     all_dot_acts = []
@@ -104,66 +114,50 @@ def main(args):
             grad = mymodel.get_gradient(example, target_id, bn).cpu().numpy()
             act = mymodel.bottlenecks_tensors[bn].cpu().detach().numpy()
             for concept in concepts:
-                cav = get_cav(bn_params[0])
-                avg_cav = np.zeros(cav.shape)
-
-                j = 0
-                for param in bn_params:
-                    if concept in param.concepts:
-                        j += 1
-                        cav = get_cav(param)
-                        avg_cav += cav
-
-                avg_cav = avg_cav / j
-                directional_derivatives = dot_product(grad, avg_cav)
-                act_dot = dot_product(act, avg_cav)
+                act_dot, directional_derivatives = plot_avg_cav_visualisation(
+                    bn_params,
+                    concept,
+                    img,
+                    act,
+                    grad,
+                    img_out_dir,
+                    img_path,
+                    bn,
+                )
                 bn_acts.append(act_dot)
                 bn_grads.append(directional_derivatives)
-
-                fig, ax = rescale_and_plot(directional_derivatives, img)
-                plt.savefig(
-                    img_out_dir
-                    / concept
-                    / f"{img_path.stem}_{bn}_directional_derivative.png"
-                )
-                plt.close(fig)
-
-                fig, ax = rescale_and_plot(act_dot, img)
-                plt.savefig(img_out_dir / concept / f"{img_path.stem}_{bn}_act_dot.png")
-                plt.close(fig)
             img_grads[bn] = bn_grads
             img_acts[bn] = bn_acts
         all_directional_derivatives.append(img_grads)
         all_dot_acts.append(img_acts)
+    return imgs, all_dot_acts, all_directional_derivatives
 
-    bottlenecks = list(bottlenecks.values())
-    for values, name in zip(
-        [all_dot_acts, all_directional_derivatives],
-        ["act_dot", "directional_derivative"],
-    ):
-        for c, concept in enumerate(concepts):
-            fig, axes = plt.subplots(
-                len(bottlenecks),
-                len(imgs),
-                figsize=(2 * len(imgs), 2 * len(bottlenecks)),
-            )
-            for i, row in enumerate(axes):
-                bn = bottlenecks[i]
-                all_vs = [values[j][bn][c] for j in range(len(row))]
-                max_v = max([np.abs(v).max() for v in all_vs])
-                for j, ax in enumerate(row):
-                    ax.imshow(imgs[j])
-                    act_rescaled = rescale_array(values[j][bn][c], imgs[j])
-                    s = ax.imshow(
-                        act_rescaled, alpha=0.4, cmap="seismic", vmin=-max_v, vmax=max_v
-                    )
-                    ax.axis("off")
-                    if j == len(row) - 1:
-                        fig.colorbar(s, ax=ax, fraction=0.046, pad=0.04)
-            plt.tight_layout()
-            plt.savefig(img_out_dir / concept / f"{name}_array.png")
 
-    print("Done!")
+def get_avg_cav_responses(params, act, grad):
+    avg_cav = get_avg_cav(params)
+
+    directional_derivatives = dot_product(grad, avg_cav)
+    act_dot = dot_product(act, avg_cav)
+    return act_dot, directional_derivatives
+
+
+def plot_avg_cav_visualisation(
+    bn_params, concept, img, act, grad, img_out_dir, img_path, bn
+):
+    concept_params = [param for param in bn_params if concept in param.concepts]
+
+    act_dot, directional_derivatives = get_avg_cav_responses(concept_params, act, grad)
+
+    fig, ax = rescale_and_plot(directional_derivatives, img)
+    plt.savefig(
+        img_out_dir / concept / f"{img_path.stem}_{bn}_directional_derivative.png"
+    )
+    plt.close(fig)
+
+    fig, ax = rescale_and_plot(act_dot, img)
+    plt.savefig(img_out_dir / concept / f"{img_path.stem}_{bn}_act_dot.png")
+    plt.close(fig)
+    return act_dot, directional_derivatives
 
 
 def load_img(path):
@@ -186,40 +180,12 @@ def rescale_array(v, img):
     return cv2.resize(v, dsize=img.shape[:2][::-1], interpolation=cv2.INTER_CUBIC)
 
 
-def dot_product(v, cav):
-    """Calculate the dot product for each 1x1xD block of activations
-    v (np.Array): Gradient or activations of a single sample (H,W,D)
-    cav (np.Array): Direction of the CAV (D,)
-    """
-    return np.dot(v[0].T, cav).T
-
-
 def cosine_sim(grad, cav):
     v = dot_product(grad, cav)
     norms = np.linalg.norm(grad[0], axis=0)
     cav_norm = np.linalg.norm(cav)
     v = v / (norms * cav_norm)
     return v
-
-
-def get_cav(param):
-    bottleneck = param.bottleneck
-    concepts = param.concepts
-    alpha = param.alpha
-    cav_dir = param.cav_dir
-
-    # Get CAVs
-    cav_hparams = CAV.default_hparams()
-    cav_hparams["alpha"] = alpha
-    a_cav_key = CAV.cav_key(
-        concepts, bottleneck, cav_hparams["model_type"], cav_hparams["alpha"]
-    )
-
-    cav_path = cav_dir / (a_cav_key.replace("/", ".") + ".pkl")
-    cav_instance = CAV.load_cav(cav_path)
-    cav_concept = concepts[0]
-    direction = cav_instance.get_direction(cav_concept)
-    return direction
 
 
 def create_model():

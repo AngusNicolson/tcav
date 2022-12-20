@@ -353,3 +353,35 @@ def get_or_train_cav(
     cav_instance.train({c: acts[c] for c in concepts})
     print("CAV accuracies: {}".format(cav_instance.accuracies))
     return cav_instance
+
+
+def get_cav_direction(param):
+    bottleneck = param.bottleneck
+    concepts = param.concepts
+    alpha = param.alpha
+    cav_dir = param.cav_dir
+
+    # Get CAVs
+    cav_hparams = CAV.default_hparams()
+    cav_hparams["alpha"] = alpha
+    a_cav_key = CAV.cav_key(
+        concepts, bottleneck, cav_hparams["model_type"], cav_hparams["alpha"]
+    )
+
+    cav_path = cav_dir / (a_cav_key.replace("/", ".") + ".pkl")
+    cav_instance = CAV.load_cav(cav_path)
+    cav_concept = concepts[0]
+    direction = cav_instance.get_direction(cav_concept)
+    return direction
+
+
+def get_avg_cav(params):
+    cav = get_cav_direction(params[0])
+    avg_cav = np.zeros_like(cav)
+
+    for param in params:
+        cav = get_cav_direction(param)
+        avg_cav += cav
+
+    avg_cav = avg_cav / len(params)
+    return avg_cav

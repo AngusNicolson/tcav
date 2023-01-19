@@ -16,24 +16,26 @@ from os import path
 from setuptools import setup, find_packages
 
 package_dir = path.abspath(path.dirname(__file__))
-with open(path.join(package_dir, 'README.md')) as f:
+with open(path.join(package_dir, "README.md")) as f:
     long_description = f.read()
 
-setup(name='tcav',
-      version='0.2.2',
-      description='Testing with Concept Activation Vectors code',
-      long_description=long_description,
-      long_description_content_type='text/markdown',
-      url='http://github.com/tensorflow/tcav',
-      author='Google Inc.',
-      author_email='opensource@google.com',
-      license='Apache 2.0',
-      packages=find_packages(),
-      zip_safe=False,
-      install_requires= [
-          'matplotlib>=2.2.4',
-          'Pillow>=6.0.0',
-          'scikit-learn>=0.20.3',
-          'scipy>=1.2.1',
-          'protobuf>=3.10.0',
-      ])
+setup(
+    name="tcav",
+    version="0.2.2",
+    description="Testing with Concept Activation Vectors code",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url="http://github.com/tensorflow/tcav",
+    author="Google Inc.",
+    author_email="opensource@google.com",
+    license="Apache 2.0",
+    packages=find_packages(),
+    zip_safe=False,
+    install_requires=[
+        "matplotlib>=2.2.4",
+        "Pillow>=6.0.0",
+        "scikit-learn>=0.20.3",
+        "scipy>=1.2.1",
+        "protobuf>=3.10.0",
+    ],
+)

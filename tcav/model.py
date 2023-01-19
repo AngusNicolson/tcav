@@ -21,17 +21,19 @@ import torch
 from torchvision import models
 
 
-class ModelWrapper():
-    """ Model wrapper to hold pytorch image models and set up the needed
+class ModelWrapper:
+    """Model wrapper to hold pytorch image models and set up the needed
     hooks to access the activations and grads.
     """
 
-    def __init__(self, model: torch.nn.Module, bottlenecks: dict, labels: Sequence[str]):
-        """ Initialize wrapper with model and set up the hooks to the bottlenecks.
+    def __init__(
+        self, model: torch.nn.Module, bottlenecks: dict, labels: Sequence[str]
+    ):
+        """Initialize wrapper with model and set up the hooks to the bottlenecks.
         Args:
             model (nn.Module): Model to test
-            bottlenecks (dict): Dictionary attaching names to the layers to
-                hook into. Expects, at least, an input, logit and prediction.
+            bottlenecks (dict): Dictionary attaching names to the layers to hook into. Expects, at least, an input,
+                logit and prediction.
             labels (list): Class labels in order the model expects
         """
         self.ends = None
@@ -45,14 +47,13 @@ class ModelWrapper():
         self.labels = labels
 
         def save_activation(name):
-            """ Creates hooks to the activations
+            """Creates hooks to the activations
             Args:
                 name (string): Name of the layer to hook into
             """
 
             def hook(module, input, output):
-                """ Saves the activation hook to dictionary
-                """
+                """Saves the activation hook to dictionary"""
                 self.bottlenecks_tensors[name] = output
 
             return hook
@@ -61,7 +62,9 @@ class ModelWrapper():
             if name in bottlenecks.keys():
                 mod.register_forward_hook(save_activation(bottlenecks[name]))
 
-    def _make_gradient_tensors(self, x: torch.Tensor, y: int, bottleneck_name: str) -> torch.Tensor:
+    def _make_gradient_tensors(
+        self, x: torch.Tensor, y: int, bottleneck_name: str
+    ) -> torch.Tensor:
         """
         Makes gradient tensor for logit y w.r.t. layer with activations
 
@@ -77,23 +80,22 @@ class ModelWrapper():
         return grad(out[:, y], acts)[0]
 
     def eval(self):
-        """ Sets wrapped model to eval mode.
-        """
+        """Sets wrapped model to eval mode."""
         self.model.eval()
 
     def train(self):
-        """ Sets wrapped model to train mode.
-        """
+        """Sets wrapped model to train mode."""
         self.model.train()
 
     def __call__(self, x: torch.Tensor):
-        """ Calls prediction on wrapped model.
-        """
+        """Calls prediction on wrapped model."""
         self.ends = self.model(x)
         return self.ends
 
-    def get_gradient(self, x: torch.Tensor, y: int, bottleneck_name: str) -> torch.Tensor:
-        """ Returns the gradient at a given bottle_neck.
+    def get_gradient(
+        self, x: torch.Tensor, y: int, bottleneck_name: str
+    ) -> torch.Tensor:
+        """Returns the gradient at a given bottle_neck.
         Args:
             x: Model input
             y: Index of the logit layer (class)
@@ -120,7 +122,6 @@ def create_model(freeze_weights=False, n_classes=13):
 
     # NB: Newly initialised layers have requires_grad=True
     model.fc = torch.nn.Sequential(
-        torch.nn.Dropout(0.5),
-        torch.nn.Linear(2048, n_classes)
+        torch.nn.Dropout(0.5), torch.nn.Linear(2048, n_classes)
     )
     return model

@@ -46,7 +46,9 @@ def main(args):
         grad_dir=dirs["grad"],
     )
 
-    img_paths = [Path(v["path"]) for v in act_generator.concept_dict[args.target].values()]
+    img_paths = [
+        Path(v["path"]) for v in act_generator.concept_dict[args.target].values()
+    ]
     imgs, all_dot_acts, all_directional_derivatives = get_all_responses(
         args.target, img_paths, mytcav, act_generator, concepts, mymodel, data_path
     )

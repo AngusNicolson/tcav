@@ -17,6 +17,9 @@ limitations under the License.
 import os
 from pathlib import Path
 from multiprocessing import dummy as multiprocessing
+
+import torch
+
 from tcav.cav import CAV
 from tcav.cav import get_or_train_cav
 from tcav import run_params
@@ -166,6 +169,7 @@ class TCAV(object):
         random_concepts=None,
         do_random_pairs=True,
         n_repeats=1,
+        perturb=None,
     ):
         """Initialze tcav class.
 
@@ -189,6 +193,7 @@ class TCAV(object):
                            value for both concepts and random_concepts.
           do_random_pairs: Whether to train CAVs for random samples i vs random samples j (i!=j)
           n_repeats: Load dataset n_repeats times for CAV training (for use with augmentations)
+          perturb: Whether to use perturbations rather than gradients to calculate TCAV score
         """
         self.target = target
         self.concepts = concepts
@@ -203,6 +208,7 @@ class TCAV(object):
             set(concepts) == set(random_concepts)
         )
         self.n_repeats = n_repeats
+        self.perturb = perturb
 
         if num_random_exp < 2:
             print("the number of random concepts has to be at least 2")
@@ -287,36 +293,82 @@ class TCAV(object):
         i = 0
         examples = self.activation_generator.get_examples_for_concept(self.target)
         for bottleneck in self.bottlenecks:
-            grad_path = self.grad_dir / f"grad_{self.target}_{bottleneck}.npy"
-            if grad_path.exists() and not overwrite:
-                gradients = np.load(str(grad_path), allow_pickle=True)
+            if self.perturb is None:
+                gradients = self.load_gradients(examples, bottleneck, overwrite)
             else:
-                gradients = self.get_gradients(
-                    self.mymodel,
-                    self.target,
-                    bottleneck,
-                    examples,
-                    act_func=self.activation_generator.act_func,
-                )
-                gradients = np.stack(gradients)
-                np.save(str(grad_path), gradients, allow_pickle=False)
+                gradients = None
+                # If perturb is not None we will calculate these in _run_single_set
             for param in self.params:
                 if param.bottleneck == bottleneck:
                     print(f"Running param {i} of {len(self.params)}")
-                    results.append(self._run_single_set(param, gradients))
+                    results.append(self._run_single_set(param, examples, gradients))
                     i += 1
         print(
             f"Done running {len(self.params)} params. Took {time.time() - now} seconds..."
         )
         return results
 
-    def _run_single_set(self, param, gradients):
+    def load_gradients(self, examples, bottleneck, overwrite=False):
+        grad_path = self.grad_dir / f"grad_{self.target}_{bottleneck}.npy"
+        if grad_path.exists() and not overwrite:
+            gradients = np.load(str(grad_path), allow_pickle=True)
+        else:
+            gradients = self.get_gradients(
+                self.mymodel,
+                self.target,
+                bottleneck,
+                examples,
+                act_func=self.activation_generator.act_func,
+            )
+            gradients = np.stack(gradients)
+            np.save(str(grad_path), gradients, allow_pickle=False)
+        return gradients
+
+    def get_perturbations(self, examples, perturb, bottleneck, cav):
+        """Get activations that have been perturbed in the direction of a CAV"""
+        activations = self.activation_generator.get_activations_for_examples(
+            examples, bottleneck, grad=False, use_act_func=False
+        )
+        cav_dir = cav.get_direction(cav.concepts[0]).astype("float32")
+        cav_dir = cav_dir.reshape((cav_dir.shape[0], 1, 1))
+        perturbations = activations + perturb * cav_dir
+        perturbation_output = self.get_perturbed_output(perturbations, bottleneck)
+        perturbation_output = perturbation_output.cpu().detach()
+        return perturbation_output
+
+    def get_perturbed_output(self, perturbations, bottleneck):
+        bottleneck_layers = bottleneck.split(".")
+        layers_to_run = []
+        run = False
+        for name, mod in self.mymodel.model.named_modules():
+            if run:
+                if bottleneck in name:
+                    continue
+                if bottleneck_layers[0] in name:
+                    if len(name.split(".")) < 3:
+                        layers_to_run.append(name)
+                elif len(name.split(".")) == 1:
+                    layers_to_run.append(name)
+            if name == bottleneck:
+                run = True
+        with torch.no_grad():
+            out = perturbations.to(device)
+            layers_run = []
+            for name, mod in self.mymodel.model.named_modules():
+                if name in layers_to_run:
+                    if name == "fc":
+                        out = out.squeeze()
+                    out = mod(out)
+                    layers_run.append(name)
+        return out
+
+    def _run_single_set(self, param, examples, gradients):
         """Run TCAV with provided for one set of (target, concepts).
 
         Args:
           param: parameters to run
-          overwrite: if True, overwrite any saved CAV files.
-          run_parallel: run this parallel.
+          examples: raw images (input to model)
+          gradients: image gradients
 
         Returns:
           a dictionary of results (panda frame)
@@ -328,6 +380,7 @@ class TCAV(object):
         alpha = param.alpha
         mymodel = param.model
         cav_dir = param.cav_dir
+        cav_concept = concepts[0]
         print(f"Running {target_class} {concepts}")
 
         # Get CAVs
@@ -340,12 +393,28 @@ class TCAV(object):
         cav_path = os.path.join(cav_dir, a_cav_key.replace("/", ".") + ".pkl")
         cav_instance = CAV.load_cav(cav_path)
 
-        # Hypo testing
-        cav_concept = concepts[0]
-        val_directional_dirs = [
-            np.dot(grad, cav_instance.get_direction(cav_concept)) for grad in gradients
-        ]
-        i_up = sum([v > 0 for v in val_directional_dirs]) / len(val_directional_dirs)
+        val_directional_dirs = None
+        if self.perturb is not None:
+            with torch.no_grad():
+                perturbation_output = self.get_perturbations(
+                    examples, self.perturb, bottleneck, cav_instance
+                )
+                output = self.mymodel(examples.to(device)).cpu()
+                gradients = perturbation_output - output
+            gradients = gradients.numpy()
+
+            class_id = param.model.label_to_id(param.target_class)
+            gradient = gradients[:, class_id]
+            i_up = sum([v > 0 for v in gradient]) / len(gradient)
+        else:
+            # Hypo testing
+            val_directional_dirs = [
+                np.dot(grad, cav_instance.get_direction(cav_concept))
+                for grad in gradients
+            ]
+            i_up = sum([v > 0 for v in val_directional_dirs]) / len(
+                val_directional_dirs
+            )
         result = {
             "cav_key": a_cav_key,
             "cav_concept": cav_concept,
@@ -353,14 +422,19 @@ class TCAV(object):
             "target_class": target_class,
             "cav_accuracies": cav_instance.accuracies,
             "i_up": i_up,
-            "val_directional_dirs_abs_mean": np.mean(np.abs(val_directional_dirs)),
-            "val_directional_dirs_mean": np.mean(val_directional_dirs),
-            "val_directional_dirs_std": np.std(val_directional_dirs),
-            "val_directional_dirs": val_directional_dirs,
             "note": f"alpha_{alpha} ",
             "alpha": alpha,
             "bottleneck": bottleneck,
         }
+        if val_directional_dirs is not None:
+            val_directional_dirs_dict = {
+                "val_directional_dirs_abs_mean": np.mean(np.abs(val_directional_dirs)),
+                "val_directional_dirs_mean": np.mean(val_directional_dirs),
+                "val_directional_dirs_std": np.std(val_directional_dirs),
+                "val_directional_dirs": val_directional_dirs,
+            }
+            result.update(val_directional_dirs_dict)
+
         return result
 
     def _process_what_to_run_expand(

@@ -39,6 +39,7 @@ def main(args):
         num_random_exp=args.num_rand,
         do_random_pairs=True,
         grad_dir=dirs["grad"],
+        perturb=args.perturb,
     )
 
     print("Training CAVs...")
@@ -186,5 +187,11 @@ if __name__ == "__main__":
         "--overwrite",
         help="Overwrite activations, CAVs and gradients",
         action="store_true",
+    )
+    parser.add_argument(
+        "--perturb",
+        help="Whether to perturb the activations instead of using gradients",
+        default=None,
+        type=float,
     )
     main(parser.parse_args())

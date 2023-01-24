@@ -77,9 +77,14 @@ class ActivationGenerator:
     def get_model(self):
         return self.model
 
-    def _get_act(self, bottleneck, cpu=True):
+    def _get_act(self, bottleneck, cpu=True, use_act_func=True):
+        """Get the activations for a specific model layer (bottleneck)
+        bottleneck (str): The name of the layer
+        cpu (bool): Whether to move the activations to cpu
+        use_act_func (bool): Whether to use the activation function (self.act)
+        """
         act = self.model.bottlenecks_tensors[bottleneck]
-        if self.act_func is not None:
+        if (self.act_func is not None) and use_act_func:
             act = self.act_func(act)
         if cpu:
             act = act.cpu()
@@ -96,23 +101,28 @@ class ActivationGenerator:
             raise NotImplementedError(f"act_func {act_func} not recognised.")
         return act_func
 
-    def _get_activations_for_examples(self, examples, bottleneck, batch_size=32):
+    def _get_activations_for_examples(
+        self, examples, bottleneck, batch_size=32, use_act_func=True
+    ):
         acts = []
         for batch in torch.split(examples, batch_size):
             out_ = self.model(batch.to(device))
             del out_
-            acts.append(self._get_act(bottleneck))
+            acts.append(self._get_act(bottleneck, use_act_func=use_act_func))
         return acts
 
     def get_activations_for_examples(
-        self, examples, bottleneck, batch_size=32, grad=False
+        self, examples, bottleneck, batch_size=32, grad=False, use_act_func=True
     ):
-        acts = []
         if grad:
-            self._get_activations_for_examples(examples, bottleneck, batch_size)
+            acts = self._get_activations_for_examples(
+                examples, bottleneck, batch_size, use_act_func=use_act_func
+            )
         else:
             with torch.no_grad():
-                self._get_activations_for_examples(examples, bottleneck, batch_size)
+                acts = self._get_activations_for_examples(
+                    examples, bottleneck, batch_size, use_act_func=use_act_func
+                )
         return torch.cat(acts)
 
     def get_activations_for_concept(

@@ -90,9 +90,7 @@ def plot_avg_cav_visualisation(
     plt.close(fig)
 
 
-def plot_visualisation_array(
-    imgs, values, concept_idx, name, bottlenecks, img_out_dir
-):
+def plot_visualisation_array(imgs, values, concept_idx, name, bottlenecks, img_out_dir):
     fig, axes = plt.subplots(
         len(bottlenecks),
         len(imgs),

@@ -74,6 +74,13 @@ class ActivationGenerator:
             for out_k, out_v in self.concept_dict.items()
         }
 
+        missing_concepts = []
+        for k, v in self.concept_dict.items():
+            if len(v) == 0:
+                missing_concepts.append(k)
+        if len(missing_concepts) > 0:
+            raise ValueError(f"No examples found for concepts: {', '.join(missing_concepts)}")
+
     def get_model(self):
         return self.model
 

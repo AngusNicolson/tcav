@@ -285,16 +285,29 @@ class TCAV(object):
           results: an object (either a Results proto object or a list of
             dictionaries) containing metrics for TCAV results.
         """
+        examples = self.activation_generator.get_examples_for_concept(self.target)
+        results = self.run_on_examples(examples, overwrite=overwrite)
+        return results
+
+    def run_on_examples(self, examples, overwrite=False, grad_suffix=""):
+        """Run TCAV for all parameters (concept and random) for the given examples,
+         write results to html.
+
+        Returns:
+          results: an object (either a Results proto object or a list of
+            dictionaries) containing metrics for TCAV results.
+        """
 
         print(f"Running {len(self.params)} params")
 
         results = []
         now = time.time()
         i = 0
-        examples = self.activation_generator.get_examples_for_concept(self.target)
         for bottleneck in self.bottlenecks:
             if self.perturb is None:
-                gradients = self.load_gradients(examples, bottleneck, overwrite)
+                gradients = self.load_gradients(
+                    examples, bottleneck, overwrite, grad_suffix
+                )
             else:
                 gradients = None
                 # If perturb is not None we will calculate these in _run_single_set
@@ -308,8 +321,8 @@ class TCAV(object):
         )
         return results
 
-    def load_gradients(self, examples, bottleneck, overwrite=False):
-        grad_path = self.grad_dir / f"grad_{self.target}_{bottleneck}.npy"
+    def load_gradients(self, examples, bottleneck, overwrite=False, suffix=""):
+        grad_path = self.grad_dir / f"grad_{self.target}_{bottleneck}{suffix}.npy"
         if grad_path.exists() and not overwrite:
             gradients = np.load(str(grad_path), allow_pickle=True)
         else:
@@ -341,6 +354,8 @@ class TCAV(object):
         layers_to_run = []
         run = False
         for name, mod in self.mymodel.model.named_modules():
+            # This assumes that the model is sequential and only has a certain depth of module
+            # Works for ResNet
             if run:
                 if bottleneck in name:
                     continue

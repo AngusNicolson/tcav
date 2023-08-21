@@ -45,6 +45,7 @@ class ModelWrapper:
         self.model.eval()
         self.shape = (224, 224)
         self.labels = labels
+        self.bottlenecks = []
 
         def save_activation(name):
             """Creates hooks to the activations
@@ -61,6 +62,7 @@ class ModelWrapper:
         for name, mod in self.model.named_modules():
             if name in bottlenecks.keys():
                 mod.register_forward_hook(save_activation(bottlenecks[name]))
+                self.bottlenecks.append(name)
 
     def _make_gradient_tensors(
         self, x: torch.Tensor, y: int, bottleneck_name: str

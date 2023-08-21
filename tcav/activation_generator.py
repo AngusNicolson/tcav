@@ -41,6 +41,7 @@ class ActivationGenerator:
         num_workers=0,
         prefix="",
         act_func: str = None,
+        data_saved_on_disk=True,
     ):
         """
         source_json (str): Path to a .json with filepaths for each img, categorised by concept
@@ -73,13 +74,13 @@ class ActivationGenerator:
             }
             for out_k, out_v in self.concept_dict.items()
         }
-
-        missing_concepts = []
-        for k, v in self.concept_dict.items():
-            if len(v) == 0:
-                missing_concepts.append(k)
-        if len(missing_concepts) > 0:
-            raise ValueError(f"No examples found for concepts: {', '.join(missing_concepts)}")
+        if data_saved_on_disk:
+            missing_concepts = []
+            for k, v in self.concept_dict.items():
+                if len(v) == 0:
+                    missing_concepts.append(k)
+            if len(missing_concepts) > 0:
+                raise ValueError(f"No examples found for concepts: {', '.join(missing_concepts)}")
 
     def get_model(self):
         return self.model
@@ -144,13 +145,17 @@ class ActivationGenerator:
                 dataset, batch_size, shuffle=shuffle, num_workers=self.num_workers
             )
             with torch.no_grad():
+                n = 0
                 for sample in dataloader:
                     out_ = self.model(sample[0].to(device))
                     for bn in bottleneck_names:
                         bns[bn].append(self._get_act(bn).detach().numpy())
                     del out_
+                    n += len(sample[1])
+                    if n >= self.max_examples:
+                        break
 
-        bns = {k: np.concatenate(v) for k, v in bns.items()}
+        bns = {k: np.concatenate(v)[:self.max_examples] for k, v in bns.items()}
         return bns
 
     def process_and_load_activations(

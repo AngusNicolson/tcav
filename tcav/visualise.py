@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,6 +11,10 @@ from tcav.utils import dot_product
 def get_all_responses(
     target, img_paths, mytcav, act_generator, concepts, mymodel, data_path
 ):
+    if img_paths is None:
+        load_imgs_from_disk = False
+    else:
+        load_imgs_from_disk = True
     examples = act_generator.get_examples_for_concept(target)
     params = {}
     for bn in mytcav.bottlenecks:
@@ -20,8 +26,11 @@ def get_all_responses(
     all_dot_acts = []
     for i, example in enumerate(examples):
         example = example.to("cuda")
-        img_path = data_path / img_paths[i]
-        img = load_img(img_path)
+        if load_imgs_from_disk:
+            img_path = data_path / img_paths[i]
+            img = load_img(img_path)
+        else:
+            img = example.detach().cpu().numpy().transpose(1, 2, 0)
         imgs.append(img)
         img_acts = {}
         img_grads = {}
@@ -52,6 +61,8 @@ def plot_all_visualisations(
     img_paths,
     img_out_dir,
 ):
+    if img_paths is None:
+        img_paths = [Path(f"{i:03d}.png")for i in range(len(imgs))]
     for i, img in enumerate(imgs):
         for bn in bottlenecks:
             for c, concept in enumerate(concepts):
@@ -123,7 +134,8 @@ def rescale_and_plot(v, img):
     act_rescaled = rescale_array(v, img)
     fig, ax = plt.subplots()
     ax.imshow(img)
-    s = ax.imshow(act_rescaled, alpha=0.4, cmap="seismic")
+    max_v = max([-act_rescaled.min(), act_rescaled.max()])
+    s = ax.imshow(act_rescaled, alpha=0.4, cmap="seismic", vmin=-max_v, vmax=max_v)
     fig.colorbar(s, ax=ax)
     ax.axis("off")
     return fig, ax

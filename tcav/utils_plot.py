@@ -102,7 +102,7 @@ def plot_results(
                 i_ups = [item["i_up"] for item in result_summary[concept][bottleneck]]
 
                 # Calculate statistical significance
-                _, p_val = ttest_ind(random_i_ups[bottleneck], i_ups)
+                _, p_val = ttest_ind(random_i_ups[bottleneck], i_ups, equal_var=False)
 
                 if bottleneck not in plot_data:
                     plot_data[bottleneck] = {
@@ -204,6 +204,7 @@ def plot_cav_accuracies(acc_means, concepts, bottlenecks):
         ax.plot(list(bottlenecks.keys()), acc_means[concept], label=concept)
     ax.set_xlabel("Layer")
     ax.set_ylabel("Accuracy")
+    ax.set_ylim([None, 1.02])
     ax.tick_params(axis="x", rotation=45)
     plt.legend(frameon=False)
     return fig, ax

@@ -14,7 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import importlib
 from pathlib import Path
+from argparse import ArgumentParser
 from scipy.stats import ttest_ind
 import numpy as np
 from tcav.tcav_results.results_pb2 import Result, Results
@@ -41,6 +43,114 @@ _KEYS = [
     "alpha",
     "bottleneck",
 ]
+
+
+def get_parser():
+    parser = ArgumentParser()
+    parser.add_argument(
+        "--working-dir",
+        help="Where to save intermediate outputs",
+        default="/tmp/tcav/example",
+    )
+    parser.add_argument("--source-dir", help="The location of the images")
+    parser.add_argument(
+        "--layers",
+        help="A comma seperated list of the layers to run TCAV on",
+        default="layer4.0, layer4.1",
+    )
+    parser.add_argument(
+        "--num-rand",
+        help="The number of random experiments to run",
+        type=int,
+        default=30,
+    )
+    parser.add_argument("--target", help="The target class name")
+    parser.add_argument(
+        "--concepts",
+        help="A comma seperated list of the concepts you wish to create/load CAVs for",
+    )
+    parser.add_argument(
+        "--max-examples",
+        help="The maximum number of images per concept",
+        type=int,
+        default=100,
+    )
+    parser.add_argument(
+        "--num-workers",
+        help="The number of cpu workers for dataloading",
+        type=int,
+        default=4,
+    )
+    parser.add_argument(
+        "--exp-name",
+        help="Experiment name (for saving results) and CAV loading",
+        default="example",
+    )
+    parser.add_argument(
+        "--act-func",
+        help="Optional function to apply to the model activations",
+        default=None,
+    )
+    parser.add_argument(
+        "--perturb",
+        help="Whether to perturb the activations instead of using gradients",
+        default=None,
+        type=float,
+    )
+    parser.add_argument(
+        "--suffix",
+        help="Optional suffix to add to results files",
+        default="",
+    )
+    parser.add_argument(
+        "--model-path",
+        help="Optional path to a model checkpoint",
+        default=None,
+    )
+    parser.add_argument(
+        "--ldm-config",
+        help="Path to model config if using an ldm model",
+        default=None,
+    )
+    parser.add_argument(
+        "--no-normalize", help="Don't train any new CAVs", action="store_true"
+    )
+    parser.add_argument(
+        "--dataset-config",
+        help="An optional .yaml to define the dataset if not using JsonDataset",
+        default=None,
+    )
+    return parser
+
+
+def get_obj_from_str(string, reload=False):
+    module, cls = string.rsplit(".", 1)
+    if reload:
+        module_imp = importlib.import_module(module)
+        importlib.reload(module_imp)
+    return getattr(importlib.import_module(module, package=None), cls)
+
+
+def make_dirs(args):
+    working_dir = Path(args.working_dir) / args.exp_name
+    activation_dir = working_dir / "activations"
+    cav_dir = working_dir / "cavs"
+    grad_dir = working_dir / "grads"
+    source_dir = Path(args.source_dir)
+    results_dir = source_dir / f"results/{args.exp_name}"
+
+    dirs = {
+        "source": source_dir,
+        "activation": activation_dir,
+        "working": working_dir,
+        "cav": cav_dir,
+        "grad": grad_dir,
+        "results": results_dir,
+    }
+
+    for d in dirs.values():
+        d.mkdir(exist_ok=True, parents=True)
+    return dirs
 
 
 def flatten(nested_list):

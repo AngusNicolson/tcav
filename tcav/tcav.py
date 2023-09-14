@@ -349,7 +349,7 @@ class TCAV(object):
         perturbation_output = perturbation_output.cpu().detach()
         return perturbation_output
 
-    def get_perturbed_output(self, perturbations, bottleneck):
+    def get_perturbed_output(self, perturbations, bottleneck, requires_grad=False):
         bottleneck_layers = bottleneck.split(".")
         layers_to_run = []
         run = False
@@ -366,7 +366,8 @@ class TCAV(object):
                     layers_to_run.append(name)
             if name == bottleneck:
                 run = True
-        with torch.no_grad():
+
+        def run_model_from_perturbation():
             out = perturbations.to(device)
             layers_run = []
             for name, mod in self.mymodel.model.named_modules():
@@ -375,6 +376,13 @@ class TCAV(object):
                         out = out.squeeze()
                     out = mod(out)
                     layers_run.append(name)
+            return out
+
+        if requires_grad:
+            out = run_model_from_perturbation()
+        else:
+            with torch.no_grad():
+                out = run_model_from_perturbation()
         return out
 
     def _run_single_set(self, param, examples, gradients):

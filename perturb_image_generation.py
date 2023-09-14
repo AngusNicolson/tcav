@@ -11,8 +11,7 @@ from tcav.cav import CAV
 
 from torchinfo import summary
 
-from run_tcav import get_class_names, get_act_gen, create_model, \
-    load_examples
+from tcav.experiment import get_class_names, get_act_gen, create_model, load_examples
 
 
 def main(args):

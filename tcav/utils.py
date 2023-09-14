@@ -17,10 +17,12 @@ limitations under the License.
 import importlib
 from pathlib import Path
 from argparse import ArgumentParser
+
 from scipy.stats import ttest_ind
 import numpy as np
-from tcav.tcav_results.results_pb2 import Result, Results
 import torch
+
+from tcav.tcav_results.results_pb2 import Result, Results
 
 # Grab a GPU if there is one
 if torch.cuda.is_available():

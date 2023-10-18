@@ -138,6 +138,14 @@ def get_obj_from_str(string, reload=False):
     return getattr(importlib.import_module(module, package=None), cls)
 
 
+def instantiate_from_config(config):
+    if not "target" in config:
+        raise KeyError("Expected key `target` to instantiate.")
+    return get_obj_from_str(config["target"])(**config.get("params", dict()))
+
+
+
+
 def make_dirs(args):
     working_dir = Path(args.working_dir) / args.exp_name
     activation_dir = working_dir / "activations"

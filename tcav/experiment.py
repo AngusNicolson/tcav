@@ -6,10 +6,9 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision import models
 import torchvision.transforms.transforms
-from ldm.util import instantiate_from_config
 
 from tcav.model import ModelWrapper
-from tcav.utils import make_dirs
+from tcav.utils import make_dirs, instantiate_from_config
 from tcav.dataset import JsonDataset
 import tcav.activation_generator as act_gen
 from tcav.tcav import TCAV

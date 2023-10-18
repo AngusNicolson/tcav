@@ -122,6 +122,11 @@ def get_parser():
         help="An optional .yaml to define the dataset if not using JsonDataset",
         default=None,
     )
+    parser.add_argument(
+        "--random-suffix",
+        help="Add an optional suffix to the random sets (random500_{i}).",
+        default=None
+    )
     return parser
 
 

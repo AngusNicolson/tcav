@@ -25,9 +25,15 @@ def main(args):
     if args.alternate_target_examples is None:
         results = mytcav.run(overwrite=args.overwrite)
     else:
-        examples = load_examples(
-            Path(args.alternate_target_examples), mytcav.act_generator, args.max_examples
-        )
+        # If a directory exists with this name, assume load from there
+        if Path(args.alternate_target_examples).is_dir():
+            examples = load_examples(
+                Path(args.alternate_target_examples), mytcav.act_generator, args.max_examples
+            )
+        else:
+            # Otherwise, assume args.alternate_target_examples is the name of a concept/class/random
+            examples = mytcav.activation_generator.get_examples_for_concept(args.alternate_target_examples)
+
         results = mytcav.run_on_examples(
             examples, overwrite=args.overwrite, grad_suffix="_alternate"
         )
@@ -46,7 +52,7 @@ def main(args):
 
     fig, ax = utils_plot.plot_cav_accuracies(acc_means, mytcav.concepts, mytcav.bottlenecks)
     plt.tight_layout()
-    plt.savefig(dirs["results"] / f"cav_accuracies.png")
+    plt.savefig(dirs["results"] / f"cav_accuracies_{args.suffix}.png")
 
     print("Done!")
 
@@ -60,7 +66,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--alternate-target-examples",
-        help="Optional path to a directory containing target images",
+        help="Optional path to a directory containing target images or concept/target name",
         default=None,
     )
     parser.add_argument(

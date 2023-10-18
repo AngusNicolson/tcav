@@ -32,6 +32,10 @@ def setup_experiment(args):
 
     act_generator = get_act_gen(args, dirs, mymodel, concepts)
 
+    random_concepts = [f"random500_{i}" for i in range(args.num_rand)]
+    if args.random_suffix is not None:
+        random_concepts = [v + args.random_suffix for v in random_concepts]
+
     mytcav = TCAV(
         args.target,
         concepts,
@@ -43,6 +47,7 @@ def setup_experiment(args):
         do_random_pairs=True,
         grad_dir=dirs["grad"],
         perturb=args.perturb,
+        random_concepts=random_concepts,
     )
 
     return mytcav, dirs
@@ -50,7 +55,11 @@ def setup_experiment(args):
 
 def get_act_gen(args, dirs, mymodel, concepts):
     data_path = dirs["source"] / "data"
-    source_json = create_source_json(args.target, concepts, args.num_rand, data_path)
+    if args.random_suffix is None:
+        random_suffix = ""
+    else:
+        random_suffix = args.random_suffix
+    source_json = create_source_json(args.target, concepts, args.num_rand, data_path, random_suffix)
     source_json_path = dirs["results"] / "source.json"
     with open(source_json_path, "w") as fp:
         json.dump(source_json, fp, indent=2)
@@ -127,10 +136,10 @@ def get_class_names(source_dir):
     return class_names_short
 
 
-def create_source_json(target, concepts, num_random_exp, data_path):
+def create_source_json(target, concepts, num_random_exp, data_path, random_suffix=""):
     source_json = {}
     for concept in (
-        [target] + concepts + [f"random500_{i}" for i in range(num_random_exp)]
+        [target] + concepts + [f"random500_{i}{random_suffix}" for i in range(num_random_exp)]
     ):
         for ext in [".jpg", ".png"]:
             paths = (p for p in (data_path / concept).glob("**/*") if p.suffix in {".jpg", ".png"})
@@ -141,8 +150,8 @@ def create_source_json(target, concepts, num_random_exp, data_path):
     return source_json
 
 
-def load_examples(examples_dir, act_generator, n):
-    paths = examples_dir.glob("*.jpg")
+def load_examples(examples_dir, act_generator, n, extension=".jpg"):
+    paths = examples_dir.glob(f"*{extension}")
     source_json = {
         "examples": {
             i: {"path": f"/{path.name}", "label": 0} for i, path in enumerate(paths)

@@ -130,12 +130,16 @@ def load_img(path):
     return img
 
 
-def rescale_and_plot(v, img):
+def rescale_and_plot(v, img, scale_min_max=True, cmap="seismic"):
     act_rescaled = rescale_array(v, img)
     fig, ax = plt.subplots()
     ax.imshow(img)
-    max_v = max([-act_rescaled.min(), act_rescaled.max()])
-    s = ax.imshow(act_rescaled, alpha=0.4, cmap="seismic", vmin=-max_v, vmax=max_v)
+    max_v = np.abs(act_rescaled).max()
+    if scale_min_max:
+        vmin, vmax = -max_v, max_v
+    else:
+        vmin, vmax = None, None
+    s = ax.imshow(act_rescaled, alpha=0.4, cmap=cmap, vmin=vmin, vmax=vmax)
     fig.colorbar(s, ax=ax)
     ax.axis("off")
     return fig, ax

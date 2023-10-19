@@ -451,9 +451,9 @@ class TCAV(object):
         }
         if val_directional_dirs is not None:
             val_directional_dirs_dict = {
-                "val_directional_dirs_abs_mean": np.mean(np.abs(val_directional_dirs)),
-                "val_directional_dirs_mean": np.mean(val_directional_dirs),
-                "val_directional_dirs_std": np.std(val_directional_dirs),
+                "val_directional_dirs_abs_mean": float(np.mean(np.abs(val_directional_dirs))),
+                "val_directional_dirs_mean": float(np.mean(val_directional_dirs)),
+                "val_directional_dirs_std": float(np.std(val_directional_dirs)),
                 "val_directional_dirs": val_directional_dirs,
             }
             result.update(val_directional_dirs_dict)

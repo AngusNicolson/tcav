@@ -432,7 +432,7 @@ class TCAV(object):
         else:
             # Hypo testing
             val_directional_dirs = [
-                np.dot(grad, cav_instance.get_direction(cav_concept))
+                float(np.dot(grad, cav_instance.get_direction(cav_concept)))
                 for grad in gradients
             ]
             i_up = sum([v > 0 for v in val_directional_dirs]) / len(

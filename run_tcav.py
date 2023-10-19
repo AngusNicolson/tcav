@@ -52,7 +52,7 @@ def main(args):
 
     fig, ax = utils_plot.plot_cav_accuracies(acc_means, mytcav.concepts, mytcav.bottlenecks)
     plt.tight_layout()
-    plt.savefig(dirs["results"] / f"cav_accuracies_{args.suffix}.png")
+    plt.savefig(dirs["results"] / f"cav_accuracies{args.suffix}.png")
 
     print("Done!")
 

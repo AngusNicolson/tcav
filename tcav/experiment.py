@@ -13,6 +13,8 @@ from tcav.dataset import JsonDataset
 import tcav.activation_generator as act_gen
 from tcav.tcav import TCAV
 
+TROJAN_MODEL_PATH = "/home/lina3782/labs/oathack/models/interp_trojan_resnet50_model.pt"
+
 
 def setup_experiment(args):
     concepts = [v.strip() for v in args.concepts.split(",")]
@@ -22,10 +24,7 @@ def setup_experiment(args):
     bottlenecks = [bn.strip() for bn in args.layers.split(",")]
     bottlenecks = {bn: bn for bn in bottlenecks}
 
-    if args.model_path is not None:
-        model = create_model(path=args.model_path, ldm_config_path=args.ldm_config)
-    else:
-        model = create_model("imagenet")
+    model = create_model(trojan=args.trojan)
     class_names = get_class_names(dirs["source"])
     mymodel = ModelWrapper(model, bottlenecks, class_names)
 
@@ -97,21 +96,13 @@ def get_act_gen(args, dirs, mymodel, concepts):
     return act_generator
 
 
-def create_model(dataset="imagenet", path=None, ldm_config_path=None):
-    if ldm_config_path is not None:
-        if path is None:
-            raise ValueError(
-                "Need a path for the model .ckpt as well as the model config!"
-            )
-        config = load_model_config(path, ldm_config_path)
-        return instantiate_from_config(config)
-    if path is not None:
-        return torch.load(path)
-    if dataset == "imagenet":
-        return models.resnet50(pretrained=True)
-    raise ValueError(
-        "Model could not be loaded. Either no path or an unrecognised dataset."
-    )
+def create_model(trojan=True):
+    model = models.resnet50(pretrained=True).eval()
+    if trojan:
+        model.load_state_dict(
+            torch.load(TROJAN_MODEL_PATH)
+        )
+    return model
 
 
 def load_model_config(model_path, config_path, remove_loss=True):

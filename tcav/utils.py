@@ -105,14 +105,9 @@ def get_parser():
         default="",
     )
     parser.add_argument(
-        "--model-path",
-        help="Optional path to a model checkpoint",
-        default=None,
-    )
-    parser.add_argument(
-        "--ldm-config",
-        help="Path to model config if using an ldm model",
-        default=None,
+        "--trojan",
+        help="Boolean. If true, use trojan model, otherwise default ResNet50.",
+        action="store_true"
     )
     parser.add_argument(
         "--no-normalize", help="Don't train any new CAVs", action="store_true"
